@@ -16,6 +16,7 @@ WORKSHOPS=(\
 "Previous Bootcamp Staging (AOS 5.11/AHV PC 5.11) = Stable" \
 "Previous SNC (1-Node) Bootcamp Staging (AOS 5.11/AHV PC 5.11) = Stable" \
 "In Development Bootcamp Staging (AOS 5.11+/AHV PC 5.16 RC2) = Development" \
+"In Development SNC (1-Node) Bootcamp Staging (AOS 5.11+/AHV PC 5.16 RC2) = Development" \
 #"Tech Summit 2019 (AOS 5.10+/AHV PC 5.10+) = Stable" \
 #"Era Bootcamp (AOS 5.11+/AHV PC 5.11+) = Development" \
 #"Files Bootcamp (AOS 5.11+/AHV PC 5.11+) = Development" \
