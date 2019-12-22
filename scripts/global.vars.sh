@@ -41,6 +41,7 @@ QCOW2_IMAGES=(\
    hycu-3.5.0-6253.qcow2 \
    VeeamAvailability_1.0.457.vmdk \
    move3.2.0.qcow2 \
+   AutoXD.qcow2 \
 )
 ISO_IMAGES=(\
    CentOS7.iso \
