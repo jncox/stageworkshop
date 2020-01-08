@@ -13,6 +13,7 @@ begin
 WORKSHOPS=(\
 "Bootcamp Staging (AOS 5.11.x/AHV PC 5.11.2) = Current" \
 "SNC (1-Node) Bootcamp Staging (AOS 5.11.x/AHV PC 5.11.2) = Current" \
+"Frame Bootcamp Staging (AOS 5.11.x/AHV PC 5.11.2) = Current" \
 "Previous Bootcamp Staging (AOS 5.11/AHV PC 5.11) = Stable" \
 "Previous SNC (1-Node) Bootcamp Staging (AOS 5.11/AHV PC 5.11) = Stable" \
 "In Development Bootcamp Staging (AOS 5.11+/AHV PC 5.16 RC2) = Development" \
@@ -84,6 +85,12 @@ function stage_clusters() {
   if (( $(echo ${_workshop} | grep -i Summit | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh lib.pc.sh'
     _pe_launch='ts2019.sh'
+    _pc_launch=${_pe_launch}
+  fi
+
+  if (( $(echo ${_workshop} | grep -i Frame | wc ${WC_ARG}) > 0 )); then
+    _libraries+='lib.pe.sh lib.pc.sh'
+    _pe_launch='frame.sh'
     _pc_launch=${_pe_launch}
   fi
 
