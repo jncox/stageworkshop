@@ -199,9 +199,9 @@ function lcm() {
   fi
 
   # Remove the temp json files as we don't need it anymore
-       rm -rf reply_json.json
-       rm -rf reply_json_ver.json
-       rm -rf reply_json_uuid.json
+       #rm -rf reply_json.json
+       #rm -rf reply_json_ver.json
+       #rm -rf reply_json_uuid.json
 
 }
 
