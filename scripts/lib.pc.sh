@@ -57,7 +57,7 @@ function flow_enable() {
 
 function loop(){
 
-  local _attempts=40
+  local _attempts=45
   local _loops=0
   local _sleep=60
   local CURL_HTTP_OPTS=" --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure "
@@ -196,7 +196,7 @@ function lcm() {
             log "LCM Upgrade has encountered an error!!!!"
         else
             # Notify the logserver that we are starting the LCM Upgrade
-            log "LCM Upgrade starting...Process may take up to 40 minutes!!!"
+            log "LCM Upgrade starting...Process may take up to 45 minutes!!!"
 
             # Run the progess checker
             loop
