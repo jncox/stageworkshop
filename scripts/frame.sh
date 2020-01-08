@@ -27,7 +27,6 @@ case ${1} in
     && network_configure \
     && authentication_source \
     && pe_auth \
-    && prism_pro_server_deploy
 
     if (( $? == 0 )) ; then
       pc_install "${NW1_NAME}" \
