@@ -785,6 +785,352 @@ function calm_enable() {
 }
 
 ###############################################################################################################################################################################
+# Routine to upload Citrix Calm Blueprint and set variables
+###############################################################################################################################################################################
+
+function upload_citrix_calm_blueprint() {
+  local DIRECTORY="/home/nutanix/"
+  local CALM_PROJECT="default"
+  local DOMAIN=${AUTH_FQDN}
+  local AD_IP=${AUTH_HOST}
+  local PE_IP=${PE_HOST}
+  local NutanixAcropolisPlugin="none"
+  local CVM_NETWORK=${NW1_NAME}
+  local BPG_RKTOOLS_URL="none"
+  local DDC_IP=${CITRIX_DDC_HOST}
+  local NutanixAcropolis_Installed_Path="none"
+
+  local VLAN_NAME=${NW1_VLAN}
+  local DOWNLOAD_BLUEPRINTS
+
+  # download the blueprint
+  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${CALM_Blueprint} -o ${DIRECTORY}${CALM_Blueprint)
+  log "Downloading ${CALM_Blueprint} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
+
+  # ensure the directory that contains the blueprints to be imported is not empty
+  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
+      echo "There are no .json files found in the directory provided."
+      exit 0
+  fi
+
+  # create a list to store all bluprints found in the directory provided by user
+  declare -a LIST_OF_BLUEPRINTS=()
+
+  # circle thru all of the files in the provided directory and add file names to a list of blueprints array
+  # IMPORTANT NOTE: THE FILES NAMES FOR THE JSON FILES BEING IMPORTED CAN'T HAVE ANY SPACES (IN THIS SCRIPT)
+  for FILE in "$DIRECTORY"/*.json; do
+      BASENAM="$(basename ${FILE})"
+      FILENAME="${BASENAM%.*}"
+      LIST_OF_BLUEPRINTS+=("$BASENAM")
+  done
+
+  # echo $LIST_OF_BLUEPRINTS
+  # if the list of blueprints is not empty then:
+  if ((${#LIST_OF_BLUEPRINTS[@]})); then
+      #   first check if the user has specified a project for the imported blueprints
+      #   if they did, we need to make sure the project exists before assigning it to the BPs
+
+      if [ $CALM_PROJECT != 'none' ]; then
+
+          # curl command needed:
+          # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
+
+          # formulate the curl to check for project
+          _url_pc="https://localhost:9440/api/nutanix/v3/projects/list"
+
+          # make API call and store project_uuid
+          project_uuid=$(curl -s -k -X POST $_url_pc -H 'Content-Type: application/json' --user ${PRISM_ADMIN}:${PE_PASSWORD} -d "{\"kind\": \"project\", \"filter\": \"name==$CALM_PROJECT\"}" | jq -r '.entities[].metadata.uuid')
+
+          if [ -z "$project_uuid" ]; then
+              # project wasn't found
+              # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
+              echo "\nProject $CALM_PROJECT was not found. Please check the name and retry."
+              exit 0
+          else
+              echo "\nProject $CALM_PROJECT exists..."
+          fi
+      fi
+  else
+      echo '\nNo JSON files found in' + $DIRECTORY +' ... nothing to import!'
+  fi
+
+  # update the user with script progress...
+  _num_of_files=${#LIST_OF_BLUEPRINTS[@]}
+  echo "\nNumber of .json files found: ${_num_of_files}"
+  echo "\nStarting blueprint updates and then exporting to Calm one file at a time...\n\n"
+
+  # go through the blueprint JSON files list found in the specified directory
+  for elem in "${LIST_OF_BLUEPRINTS[@]}"; do
+      # read the entire JSON file from the directory
+      JSONFile=${DIRECTORY}/"$elem"
+
+      echo "\nCurrently updating blueprint $JSONFile..."
+
+      # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
+      tmp=$(mktemp)
+
+      # ADD PROJECT (affects all BPs being imported) if no project was specified on the command line, we've already pre-set the project variable to 'none' if a project was specified, we need to add it into the JSON data
+      if [ $CALM_PROJECT != 'none' ]; then
+          # add the new atributes to the JSON and overwrite the old JSON file with the new one
+          $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
+      fi
+
+      # ADD VARIABLES (affects ONLY if the current blueprint being imported MATCHES the name specified earlier "EraServerDeployment.json")
+      if [ "$elem" == "${NAME}" ]; then
+          if [ "$DOMAIN" != "none" ]; then
+              tmp_DOMAIN=$(mktemp)
+              # add the new variable to the json file and save it
+              $(jq --arg var_name $DOMAIN'(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="DOMAIN")).value=$var_name' $JSONFile >"$tmp_DOMAIN" && mv "$tmp_DOMAIN" $JSONFile)
+          fi
+          if [ "$AD_IP" != "none" ]; then
+              tmp_AD_IP=$(mktemp)
+              $(jq --arg var_name $AD_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="AD_IP")).value=$var_name' $JSONFile >"$tmp_AD_IP" && mv "$tmp_AD_IP" $JSONFile)
+          fi
+          if [ "$PE_IP" != "none" ]; then
+              tmp_PE_IP=$(mktemp)
+              $(jq --arg var_name $PE_IP'(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_IP")).value=$var_name' $JSONFile >"$tmp_PE_IP" && mv "$tmp_PE_IP" $JSONFile)
+          fi
+          if [ "$NutanixAcropolisPlugin" != "none" ]; then
+              tmp_NutanixAcropolisPluginE=$(mktemp)
+              $(jq --arg var_name $NutanixAcropolisPlugin '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="NutanixAcropolisPlugin")).value=$var_name' $JSONFile >"$tmp_NutanixAcropolisPlugin" && mv "$tmp_NutanixAcropolisPlugin" $JSONFile)
+          fi
+          if [ "$CVM_NETWORK" != "none" ]; then
+              tmp_CVM_NETWORK=$(mktemp)
+              $(jq --arg var_name $CVM_NETWORK '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CVM_NETWORK")).value=$var_name' $JSONFile >"$tmp_CVM_NETWORK" && mv "$tmp_CVM_NETWORK" $JSONFile)
+          fi
+          if [ "$BPG_RKTOOLS_URL" != "none" ]; then
+              tmp_BPG_RKTOOLS_URL=$(mktemp)
+              $(jq --arg var_name $VLAN_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="BPG_RKTOOLS_URL")).value=$var_name' $JSONFile >"$tmp_BPG_RKTOOLS_URL" && mv "$tmp_BPG_RKTOOLS_URL" $JSONFile)
+          fi
+          if [ "$DDC_IP" != "none" ]; then
+              tmp_DDC_IP=$(mktemp)
+              $(jq --arg var_name $DDC_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="DDC_IP")).value=$var_name' $JSONFile >"$tmp_DDC_IP" && mv "$tmp_DDC_IP" $JSONFile)
+          fi
+          if [ "$NutanixAcropolis_Installed_Path" != "none" ]; then
+              tmp_NutanixAcropolis_Installed_Path=$(mktemp)
+              $(jq --arg var_name $NutanixAcropolis_Installed_Path '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="NutanixAcropolis_Installed_PathL")).value=$var_name' $JSONFile >"$tmp_NutanixAcropolis_Installed_Path" && mv "$tmp_NutanixAcropolis_Installed_Path" $JSONFile)
+          fi
+      fi
+
+      # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
+      tmp_removal=$(mktemp)
+      $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
+
+      # GET BP NAME (affects all BPs being imported)
+      # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
+      blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
+      blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
+      blueprint_name="${blueprint_name#\"}" # will remove the prefix "
+
+      if [ blueprint_name == 'null' ]; then
+          echo "\nUnprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?\n"
+          exit 0
+      else
+          # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
+          echo "\nUploading the updated blueprint: $blueprint_name...\n"
+
+          # Example curl call from the console:
+          # url="https://10.42.7.39:9440/api/nutanix/v3/blueprints/import_file"
+          # path_to_file="/Users/sharon.santana/Desktop/saved_blueprints/EraServerDeployment.json"
+          # bp_name="EraServerDeployment"
+          # project_uuid="a944258a-fd8a-4d02-8646-72c311e03747"
+          # password='techX2019!'
+          # curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password"
+
+          url="https://localhost:9440/api/nutanix/v3/blueprints/import_file"
+          path_to_file=$JSONFile
+          bp_name=$blueprint_name
+          project_uuid=$project_uuid
+          password=$PE_PASSWORD
+          upload_result=$(curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password")
+
+          #if the upload_result var is not empty then let's say it was succcessful
+          if [ -z "$upload_result" ]; then
+              echo "\nUpload for $bp_name did not finish."
+          else
+              echo "\nUpload for $bp_name finished."
+              echo "-----------------------------------------"
+              # echo "Result: $upload_result"
+          fi
+      fi
+
+      echo "\nFinished uploading Citrix Blueprint and setting Variables!\n"
+
+}
+
+###############################################################################################################################################################################
+# Routine to upload Era Calm Blueprint and set variables
+###############################################################################################################################################################################
+
+function upload_era_calm_blueprint() {
+  local DIRECTORY="/home/nutanix/"
+  local CALM_PROJECT="default"
+  local ERA_IP=${ERA_HOST}
+  local PE_IP=${PE_HOST}
+  local CLSTR_NAME="none"
+  local CTR_UUID=${_storage_default_uuid}
+  local CTR_NAME=${STORAGE_DEFAULT}
+  local NETWORK_NAME=${NW1_NAME}
+  local VLAN_NAME=${NW1_VLAN}
+  local DOWNLOAD_BLUEPRINTS
+
+
+
+  # download the blueprint
+  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${ERA_Blueprint} -o ${DIRECTORY}${ERA_Blueprint})
+  log "Downloading ${ERA_Blueprint} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
+
+  # ensure the directory that contains the blueprints to be imported is not empty
+  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
+      echo "There are no .json files found in the directory provided."
+      exit 0
+  fi
+
+  # create a list to store all bluprints found in the directory provided by user
+  declare -a LIST_OF_BLUEPRINTS=()
+
+  # circle thru all of the files in the provided directory and add file names to a list of blueprints array
+  # IMPORTANT NOTE: THE FILES NAMES FOR THE JSON FILES BEING IMPORTED CAN'T HAVE ANY SPACES (IN THIS SCRIPT)
+  for FILE in "$DIRECTORY"/*.json; do
+      BASENAM="$(basename ${FILE})"
+      FILENAME="${BASENAM%.*}"
+      LIST_OF_BLUEPRINTS+=("$BASENAM")
+  done
+
+  # echo $LIST_OF_BLUEPRINTS
+  # if the list of blueprints is not empty then:
+  if ((${#LIST_OF_BLUEPRINTS[@]})); then
+      #   first check if the user has specified a project for the imported blueprints
+      #   if they did, we need to make sure the project exists before assigning it to the BPs
+
+      if [ $CALM_PROJECT != 'none' ]; then
+
+          # curl command needed:
+          # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
+
+          # formulate the curl to check for project
+          _url_pc="https://localhost:9440/api/nutanix/v3/projects/list"
+
+          # make API call and store project_uuid
+          project_uuid=$(curl -s -k -X POST $_url_pc -H 'Content-Type: application/json' --user ${PRISM_ADMIN}:${PE_PASSWORD} -d "{\"kind\": \"project\", \"filter\": \"name==$CALM_PROJECT\"}" | jq -r '.entities[].metadata.uuid')
+
+          if [ -z "$project_uuid" ]; then
+              # project wasn't found
+              # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
+              echo "\nProject $CALM_PROJECT was not found. Please check the name and retry."
+              exit 0
+          else
+              echo "\nProject $CALM_PROJECT exists..."
+          fi
+      fi
+  else
+      echo '\nNo JSON files found in' + $DIRECTORY +' ... nothing to import!'
+  fi
+
+  # update the user with script progress...
+  _num_of_files=${#LIST_OF_BLUEPRINTS[@]}
+  echo "\nNumber of .json files found: ${_num_of_files}"
+  echo "\nStarting blueprint updates and then exporting to Calm one file at a time...\n\n"
+
+  # go through the blueprint JSON files list found in the specified directory
+  for elem in "${LIST_OF_BLUEPRINTS[@]}"; do
+      # read the entire JSON file from the directory
+      JSONFile=${DIRECTORY}/"$elem"
+
+      echo "\nCurrently updating blueprint $JSONFile..."
+
+      # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
+      tmp=$(mktemp)
+
+      # ADD PROJECT (affects all BPs being imported) if no project was specified on the command line, we've already pre-set the project variable to 'none' if a project was specified, we need to add it into the JSON data
+      if [ $CALM_PROJECT != 'none' ]; then
+          # add the new atributes to the JSON and overwrite the old JSON file with the new one
+          $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
+      fi
+
+      # ADD VARIABLES (affects ONLY if the current blueprint being imported MATCHES the name specified earlier "EraServerDeployment.json")
+      if [ "$elem" == "${NAME}" ]; then
+          if [ "$ERA_IP" != "none" ]; then
+              tmp_ERA_IP=$(mktemp)
+              # add the new variable to the json file and save it
+              $(jq --arg var_name $ERA_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="ERA_IP")).value=$var_name' $JSONFile >"$tmp_ERA_IP" && mv "$tmp_ERA_IP" $JSONFile)
+              # result="$(jq --arg newOBJ "${obj_with_replaced_variable}" '.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_VIP") | .+=$newOBJ' $JSONFile )"
+          fi
+          if [ "$PE_IP" != "none" ]; then
+              tmp_PE_IP=$(mktemp)
+              # add the new variable to the json file and save it
+              $(jq --arg var_name $PE_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_VIP")).value=$var_name' $JSONFile >"$tmp_PE_IP" && mv "$tmp_PE_IP" $JSONFile)
+              # result="$(jq --arg newOBJ "${obj_with_replaced_variable}" '.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_VIP") | .+=$newOBJ' $JSONFile )"
+          fi
+          if [ "$CLSTR_NAME" != "none" ]; then
+              tmp_CLSTR_NAME=$(mktemp)
+              $(jq --arg var_name $CLSTR_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CLSTR_NAME")).value=$var_name' $JSONFile >"$tmp_CLSTR_NAME" && mv "$tmp_CLSTR_NAME" $JSONFile)
+          fi
+          if [ "$CTR_UUID" != "none" ]; then
+              tmp_CTR_UUID=$(mktemp)
+              $(jq --arg var_name $CTR_UUID '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CTR_UUID")).value=$var_name' $JSONFile >"$tmp_CTR_UUID" && mv "$tmp_CTR_UUID" $JSONFile)
+          fi
+          if [ "$CTR_NAME" != "none" ]; then
+              tmp_CTR_NAME=$(mktemp)
+              $(jq --arg var_name $CTR_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CTR_NAME")).value=$var_name' $JSONFile >"$tmp_CTR_NAME" && mv "$tmp_CTR_NAME" $JSONFile)
+          fi
+          if [ "$NETWORK_NAME" != "none" ]; then
+              tmp_NETWORK_NAME=$(mktemp)
+              $(jq --arg var_name $NETWORK_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="NETWORK_NAME")).value=$var_name' $JSONFile >"$tmp_NETWORK_NAME" && mv "$tmp_NETWORK_NAME" $JSONFile)
+          fi
+          if [ "$VLAN_NAME" != "none" ]; then
+              tmp_VLAN_NAME=$(mktemp)
+              $(jq --arg var_name $VLAN_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="VLAN_NAME")).value=$var_name' $JSONFile >"$tmp_VLAN_NAME" && mv "$tmp_VLAN_NAME" $JSONFile)
+          fi
+      fi
+
+      # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
+      tmp_removal=$(mktemp)
+      $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
+
+      # GET BP NAME (affects all BPs being imported)
+      # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
+      blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
+      blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
+      blueprint_name="${blueprint_name#\"}" # will remove the prefix "
+
+      if [ blueprint_name == 'null' ]; then
+          echo "\nUnprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?\n"
+          exit 0
+      else
+          # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
+          echo "\nUploading the updated blueprint: $blueprint_name...\n"
+
+          # Example curl call from the console:
+          # url="https://10.42.7.39:9440/api/nutanix/v3/blueprints/import_file"
+          # path_to_file="/Users/sharon.santana/Desktop/saved_blueprints/EraServerDeployment.json"
+          # bp_name="EraServerDeployment"
+          # project_uuid="a944258a-fd8a-4d02-8646-72c311e03747"
+          # password='techX2019!'
+          # curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password"
+
+          url="https://localhost:9440/api/nutanix/v3/blueprints/import_file"
+          path_to_file=$JSONFile
+          bp_name=$blueprint_name
+          project_uuid=$project_uuid
+          password=$PE_PASSWORD
+          upload_result=$(curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password")
+
+          #if the upload_result var is not empty then let's say it was succcessful
+          if [ -z "$upload_result" ]; then
+              echo "\nUpload for $bp_name did not finish."
+          else
+              echo "\nUpload for $bp_name finished."
+              echo "-----------------------------------------"
+              # echo "Result: $upload_result"
+          fi
+      fi
+
+      echo "\nFinished uploading Era Blueprint and setting Variables!\n"
+
+}
+
+###############################################################################################################################################################################
 # Routine to make changes to the PC UI; Colors, naming and the Welcome Banner
 ###############################################################################################################################################################################
 

@@ -15,6 +15,8 @@ STORAGE_DEFAULT='Default'
 STORAGE_IMAGES='Images'
 ATTEMPTS=40
 SLEEP=60
+ERA_Blueprint='EraServerDeployment.json'
+Citrix_Blueprint=''
 
 # Curl and SSH settings
 CURL_OPTS='--insecure --silent --show-error' # --verbose'
@@ -59,6 +61,8 @@ OCTET=(${PE_HOST//./ }) # zero index
 IPV4_PREFIX=${OCTET[0]}.${OCTET[1]}.${OCTET[2]}
 DATA_SERVICE_IP=${IPV4_PREFIX}.$((${OCTET[3]} + 1))
 PC_HOST=${IPV4_PREFIX}.$((${OCTET[3]} + 2))
+ERA_HOST=${IPV4_PREFIX}.$((${OCTET[3]} - 15))
+CITRIX_DDC_HOST=${IPV4_PREFIX}.$((${OCTET[3]} + 8))
 DNS_SERVERS='8.8.8.8'
 NTP_SERVERS='0.us.pool.ntp.org,1.us.pool.ntp.org,2.us.pool.ntp.org,3.us.pool.ntp.org'
 SUBNET_MASK="255.255.255.128"
@@ -128,6 +132,7 @@ case "${OCTET[0]}.${OCTET[1]}" in
      'https://s3.amazonaws.com/get-ahv-images/AutoDC2.qcow2' \
    )
     PC_DATA='http://10.55.251.38/workshop_staging/seedPC.zip'
+    BLUEPRINT_URL='http://10.55.251.38/workshop_staging/CalmBlueprints/'
     DNS_SERVERS='10.55.251.10,10.55.251.11'
     ;;
   10.42 ) # HPOC us-west = PHX
@@ -159,6 +164,7 @@ case "${OCTET[0]}.${OCTET[1]}" in
      'https://s3.amazonaws.com/get-ahv-images/AutoDC2.qcow2' \
    )
     PC_DATA='http://10.42.194.11/workshop_staging/seedPC.zip'
+    BLUEPRINT_URL='http://10.42.194.11/workshop_staging/CalmBlueprints/'
     DNS_SERVERS='10.42.196.10,10.42.194.10'
     ;;
   10.38 ) # HPOC us-west = PHX 1-Node Clusters
@@ -190,9 +196,7 @@ case "${OCTET[0]}.${OCTET[1]}" in
        'https://s3.amazonaws.com/get-ahv-images/AutoDC2.qcow2' \
      )
     PC_DATA='http://10.42.194.11/workshop_staging/seedPC.zip'
-    #NW1_SUBNET="${IPV4_PREFIX}.$((${OCTET[3]} - 6))/26"
-    #NW1_DHCP_START=${IPV4_PREFIX}.$((${OCTET[3]} + 33))
-    #NW1_DHCP_END=${IPV4_PREFIX}.$((${OCTET[3]} + 53))
+    BLUEPRINT_URL='http://10.42.194.11/workshop_staging/CalmBlueprints/'
     DNS_SERVERS="10.42.196.10,10.42.194.10"
       ;;
   10.132 ) # https://sewiki.nutanix.com/index.php/SH-COLO-IP-ADDR
