@@ -52,12 +52,12 @@ function stage_clusters() {
 
   # Map workshop to staging script(s) and libraries,
   # _pe_launch will be executed on PE
-  if (( $(echo ${_workshop} | grep -i Bootcamp | wc ${WC_ARG}) > 0 )); then
+  if (( $(echo ${_workshop} | grep -i "^Bootcamp Staging" | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh lib.pc.sh'
     _pe_launch='bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
-  if (( $(echo ${_workshop} | grep -i SNC | wc ${WC_ARG}) > 0 )); then
+  if (( $(echo ${_workshop} | grep -i "^SNC" | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh lib.pc.sh'
     _pe_launch='snc_bootcamp.sh'
     _pc_launch=${_pe_launch}
@@ -88,7 +88,7 @@ function stage_clusters() {
     _pc_launch=${_pe_launch}
   fi
 
-  if (( $(echo ${_workshop} | grep -i Frame | wc ${WC_ARG}) > 0 )); then
+  if (( $(echo ${_workshop} | grep -i "^Frame" | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh lib.pc.sh'
     _pe_launch='frame.sh'
     _pc_launch=${_pe_launch}

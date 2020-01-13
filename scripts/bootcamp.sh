@@ -18,6 +18,11 @@ case ${1} in
   PE | pe )
     . lib.pe.sh
 
+    export BUCKETS_DNS_IP="${IPV4_PREFIX}.16"
+    export BUCKETS_VIP="${IPV4_PREFIX}.17"
+    export OBJECTS_NW_START="${IPV4_PREFIX}.18"
+    export OBJECTS_NW_END="${IPV4_PREFIX}.21"
+
     args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable
 

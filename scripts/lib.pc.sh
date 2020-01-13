@@ -324,6 +324,7 @@ function object_store() {
     local CURL_HTTP_OPTS=' --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure '
     local _url_network='https://localhost:9440/api/nutanix/v3/subnets/list'
     local _url_oss='https://localhost:9440/oss/api/nutanix/v3/objectstores'
+    
 
     # Payload for the _json_data
     _json_data='{"kind":"subnet"}'
@@ -337,11 +338,17 @@ function object_store() {
 
     _json_data_oss='{"api_version":"3.0","metadata":{"kind":"objectstore"},"spec":{"name":"ntnx-objects","description":"NTNXLAB","resources":{"domain":"ntnxlab.local","cluster_reference":{"kind":"cluster","uuid":"'
     _json_data_oss+=${CLUSTER_UUID}
-    _json_data_oss+='"},"buckets_infra_network_dns":"NETWORKX.VLANX.16","buckets_infra_network_vip":"NETWORKX.VLANX.17","buckets_infra_network_reference":{"kind":"subnet","uuid":"'
+    _json_data_oss+='"},"buckets_infra_network_dns":"'
+    _json_data_oss+=${BUCKETS_DNS_IP}
+    _json_data_oss+='","buckets_infra_network_vip":"${BUCKETS_VIP}","buckets_infra_network_reference":{"kind":"subnet","uuid":"'
     _json_data_oss+=${PRIM_NETWORK_UUID}
     _json_data_oss+='"},"client_access_network_reference":{"kind":"subnet","uuid":"'
     _json_data_oss+=${PRIM_NETWORK_UUID}
-    _json_data_oss+='"},"aggregate_resources":{"total_vcpu_count":10,"total_memory_size_mib":32768,"total_capacity_gib":51200},"client_access_network_ipv4_range":{"ipv4_start":"NETWORKX.VLANX.18","ipv4_end":"NETWORKX.VLANX.21"}}}}'
+    _json_data_oss+='"},"aggregate_resources":{"total_vcpu_count":10,"total_memory_size_mib":32768,"total_capacity_gib":51200},"client_access_network_ipv4_range":{"ipv4_start":"'
+    _json_data_oss+=${OBJECTS_NW_START}
+    _json_data_oss+='","ipv4_end":"'
+    _json_data_oss+=${OBJECTS_NW_END}
+    _json_data_oss+='"}}}}'
 
     # Set the right VLAN dynamically so we are configuring in the right network
     _json_data_oss=${_json_data_oss//VLANX/${VLAN}}
