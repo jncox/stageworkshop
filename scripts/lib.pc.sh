@@ -324,6 +324,7 @@ function object_store() {
     local CURL_HTTP_OPTS=' --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure '
     local _url_network='https://localhost:9440/api/nutanix/v3/subnets/list'
     local _url_oss='https://localhost:9440/oss/api/nutanix/v3/objectstores'
+    local _url_oss_check='https://localhost:9440/oss/api/nutanix/v3/objectstores/list'
     
 
     # Payload for the _json_data
@@ -336,11 +337,15 @@ function object_store() {
     PRIM_NETWORK_UUID=$(curl -X POST -d $_json_data $CURL_HTTP_OPTS --user ${PRISM_ADMIN}:${PE_PASSWORD} $_url_network | jq '.entities[] | select (.spec.name=="Primary") | .metadata.uuid' | tr -d \")
     echo ${PRIM_NETWORK_UUID}
 
+    echo "BUCKETS_DNS_IP: ${BUCKETS_DNS_IP}, BUCKETS_VIP: ${BUCKETS_VIP}, OBJECTS_NW_START: ${OBJECTS_NW_START}, OBJECTS_NW_END: ${OBJECTS_NW_END}"
+    sleep 5
     _json_data_oss='{"api_version":"3.0","metadata":{"kind":"objectstore"},"spec":{"name":"ntnx-objects","description":"NTNXLAB","resources":{"domain":"ntnxlab.local","cluster_reference":{"kind":"cluster","uuid":"'
     _json_data_oss+=${CLUSTER_UUID}
     _json_data_oss+='"},"buckets_infra_network_dns":"'
     _json_data_oss+=${BUCKETS_DNS_IP}
-    _json_data_oss+='","buckets_infra_network_vip":"${BUCKETS_VIP}","buckets_infra_network_reference":{"kind":"subnet","uuid":"'
+    _json_data_oss+='","buckets_infra_network_vip":"'
+    _json_data_oss+=${BUCKETS_VIP}
+    _json_data_oss+='","buckets_infra_network_reference":{"kind":"subnet","uuid":"'
     _json_data_oss+=${PRIM_NETWORK_UUID}
     _json_data_oss+='"},"client_access_network_reference":{"kind":"subnet","uuid":"'
     _json_data_oss+=${PRIM_NETWORK_UUID}
@@ -354,7 +359,30 @@ function object_store() {
     _json_data_oss=${_json_data_oss//VLANX/${VLAN}}
     _json_data_oss=${_json_data_oss//NETWORKX/${NETWORK}}
 
-    curl -X POST -d $_json_data_oss $CURL_HTTP_OPTS --user ${PRISM_ADMIN}:${PE_PASSWORD} $_url_oss
+    #curl -X POST -d $_json_data_oss $CURL_HTTP_OPTS --user ${PRISM_ADMIN}:${PE_PASSWORD} $_url_oss
+     _createresponse=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_oss ${_url_oss})
+      log "Creating Object Store....."
+
+  # The response should be a Task UUID
+  if [[ ! -z $_createresponse ]]; then
+    # Check if Object store is deployed
+    _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
+    while [ $_response -ne 1 ]; do
+        log "Object Store not yet created. $_loops/$_attempts... sleeping 10 seconds"
+        _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
+        if [[ $_loops -ne 30 ]]; then
+          _createresponse=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_oss ${_url_oss})
+          sleep 10
+          (( _loops++ ))
+        else
+          log "Objects store ntnx-objects not created. Please use the UI to create it."
+          break
+        fi
+    done
+    log "Objects store been created."
+  else
+    log "Objects store could not be created. Please use the UI to create it."
+  fi
 
 }
 
