@@ -36,8 +36,75 @@ function authentication_source() {
   _pc_version=(${PC_VERSION//./ })
 
   case "${AUTH_SERVER}" in
-    'ActiveDirectory')
-      log "Manual setup = https://github.com/nutanixworkshops/labs/blob/master/setup/active_directory/active_directory_setup.rst"
+    'AutoAD')
+      local    _autoad_auth
+      local   _autoad_index=1
+      local _autoad_release=1
+      local _autoad_service='samba-ad-dc'
+      local _autoad_restart="service ${_autoad_service} restart"
+      local  _autoad_status="AD Is Running"
+      local _autoad_success="AD Is Running"
+
+
+      dns_check "dc.${AUTH_FQDN}"
+      _result=$?
+
+      if (( ${_result} == 0 )); then
+        log "${AUTH_SERVER}.IDEMPOTENCY: dc.${AUTH_FQDN} set, skip. ${_result}"
+      else
+        log "${AUTH_SERVER}.IDEMPOTENCY failed, no DNS record dc.${AUTH_FQDN}"
+
+        _error=12
+         _loop=0
+        _sleep=${SLEEP}
+
+        repo_source AUTOAD_REPOS[@]
+
+        if (( $(source /etc/profile.d/nutanix_env.sh && acli image.list | grep ${AUTH_SERVER}| wc --lines) == 0 )); then
+          log "Import ${AUTH_SERVER} image from ${SOURCE_URL}..."
+          acli image.create ${AUTH_SERVER} \
+            image_type=kDiskImage wait=true \
+            container=${STORAGE_IMAGES} source_url=${SOURCE_URL}
+        else
+          log "Image found, assuming ready. Skipping ${AUTH_SERVER} import."
+        fi
+
+        log "Create ${AUTH_SERVER} VM based on ${AUTH_SERVER} image"
+        acli "vm.create ${AUTH_SERVER} num_vcpus=2 num_cores_per_vcpu=1 memory=2G"
+        # vmstat --wide --unit M --active # suggests 2G sufficient, was 4G
+        #acli "vm.disk_create ${AUTH_SERVER}${_autodc_release} cdrom=true empty=true"
+        acli "vm.disk_create ${AUTH_SERVER} clone_from_image=${AUTH_SERVER}"
+        acli "vm.nic_create ${AUTH_SERVER} network=${NW1_NAME} ip=${AUTH_HOST}"
+
+        log "Power on ${AUTH_SERVER} VM..."
+        acli "vm.on ${AUTH_SERVER}"
+
+        _attempts=25
+            _loop=0
+           _sleep=60
+
+      while true ; do
+        (( _loop++ ))
+
+        _test=$(curl ${CURL_OPTS} -X GET http://${AUTH_HOST}:8000/ | grep "${_autoad_success}")
+        if [[ "${_test}" == "${_autoad_success}" ]]; then
+          log "${AUTH_SERVER} is ready."
+          sleep ${_sleep}
+          break
+        elif (( ${_loop} > ${_attempts} )); then
+          log "Error ${_error}: ${AUTH_SERVER} VM running: giving up after ${_loop} tries."
+          #_result=$(source /etc/profile.d/nutanix_env.sh \
+          #  && for _vm in $(source /etc/profile.d/nutanix_env.sh && acli vm.list | grep ${AUTH_SERVER}) ; do acli -y vm.delete $_vm; done)
+          # acli image.delete ${AUTH_SERVER}${_autodc_release}
+          #log "Remediate by deleting the ${AUTH_SERVER} VM from PE (just attempted by this script: ${_result}) and then running acli $_"
+          exit ${_error}
+        else
+          log "_test ${_loop}/${_attempts}=|${_test}|: sleep ${_sleep} seconds..."
+          sleep ${_sleep}
+        fi
+      done
+
+      fi
       ;;
     'AutoDC')
       local    _autodc_auth
@@ -360,7 +427,7 @@ echo $HTTP_JSON_BODY
 
 
 ###############################################################################################################################################################################
-# Routine to crerate the networks
+# Routine to create the networks
 ###############################################################################################################################################################################
 function network_configure() {
   local _network_name="${NW1_NAME}"

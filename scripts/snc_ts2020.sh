@@ -28,8 +28,31 @@ case ${1} in
     #export      FILES_URL='http://10.42.8.50/images/nutanix-afs-el7.3-release-afs-3.2.0.1-stable.qcow2'
     #export  FILES_METAURL='https://s3.amazonaws.com/get-ahv-images/nutanix-afs-el7.3-release-afs-3.2.0.1-stable-metadata.json'
     #export      FILES_URL='https://s3.amazonaws.com/get-ahv-images/nutanix-afs-el7.3-release-afs-3.2.0.1-stable.qcow2'
-    export NW2_DHCP_START="${IPV4_PREFIX}.132"
-    export   NW2_DHCP_END="${IPV4_PREFIX}.229"
+
+    # Single Node Cluster Options
+
+    export NW1_SUBNET="${IPV4_PREFIX}.$((${OCTET[3]} - 6))/26"
+    export NW1_GATEWAY="${IPV4_PREFIX}.$((${OCTET[3]} - 5))"
+    export NW1_DHCP_START="${IPV4_PREFIX}.$((${OCTET[3]} + 33))"
+    export NW1_DHCP_END="${IPV4_PREFIX}.$((${OCTET[3]} + 53))"
+    export SUBNET_MASK="255.255.255.192"
+    #export BUCKETS_DNS_IP="${IPV4_PREFIX}.$((${OCTET[3]} + 25))"
+    #export BUCKETS_VIP="${IPV4_PREFIX}.$((${OCTET[3]} + 26))"
+    #export OBJECTS_NW_START="${IPV4_PREFIX}.$((${OCTET[3]} + 27))"
+    #export OBJECTS_NW_END="${IPV4_PREFIX}.$((${OCTET[3]} + 30))"
+
+    export NW2_NAME=''
+    export NW2_VLAN=''
+    export NW2_SUBNET=''
+    export NW2_DHCP_START=''
+    export NW2_DHCP_END=''
+
+    #export NW2_DHCP_START="${IPV4_PREFIX}.132"
+    #export NW2_DHCP_END="${IPV4_PREFIX}.229"
+
+    export AUTH_SERVER='AutoAD'
+
+    export _external_nw_name="${1}"
 
     args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable
@@ -39,7 +62,8 @@ case ${1} in
     && pe_init \
     && network_configure \
     && authentication_source \
-    && pe_auth
+    && pe_auth \
+    && prism_pro_server_deploy
 
     if (( $? == 0 )) ; then
       pc_install "${NW1_NAME}" \
@@ -59,7 +83,11 @@ case ${1} in
         log "PE = https://${PE_HOST}:9440"
         log "PC = https://${PC_HOST}:9440"
 
-        files_install && sleep 30 && dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
+        files_install && sleep 30
+
+        create_file_server "${NW1_NAME}" "${NW2_NAME}" && sleep 30
+
+        file_analytics_install && sleep 30 && dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
         #dependencies 'remove' 'sshpass'
         finish
       fi
@@ -73,29 +101,33 @@ case ${1} in
   PC | pc )
     . lib.pc.sh
 
-    #export QCOW2_REPOS=(\
-     #'http://10.42.8.50/images/' \
-     #'https://s3.amazonaws.com/get-ahv-images/' \
-    #) # talk to Nathan.C to populate S3, Sharon.S to populate Daisy File Share
     export QCOW2_IMAGES=(\
       CentOS7.qcow2 \
       Windows2016.qcow2 \
       Windows2012R2.qcow2 \
       Windows10-1709.qcow2 \
       ToolsVM.qcow2 \
-      move-3.0.1.qcow2  \
-      ERA-Server-build-1.0.1.qcow2 \
-      sherlock-k8s-base-image_403.qcow2 \
-      hycu-3.5.0-6253.qcow2 \
+      Linux_ToolsVM.qcow2 \
+      ERA-Server-build-1.2.0.1.qcow2 \
+      MSSQL-2016-VM.qcow2 \
+      HYCU/Mine/HYCU-4.0.3-Demo.qcow2 \
       VeeamAvailability_1.0.457.vmdk \
-      'http://download.nutanix.com/karbon/0.8/acs-centos7.qcow2' \
+      move-3.4.1.qcow2 \
+      AutoXD.qcow2 \
     )
     export ISO_IMAGES=(\
+      CentOS7.iso \
+      Windows2016.iso \
       Windows2012R2.iso \
+      Windows10.iso \
+      Nutanix-VirtIO-1.1.5.iso \
       SQLServer2014SP3.iso \
-      Nutanix-VirtIO-1.1.3.iso \
+      Citrix_Virtual_Apps_and_Desktops_7_1912.iso \
       VeeamBR_9.5.4.2615.Update4.iso \
     )
+
+
+    run_once
 
     dependencies 'install' 'jq' || exit 13
 
@@ -133,19 +165,20 @@ case ${1} in
     && pc_dns_add \
     && pc_ui \
     && pc_auth \
-
-    # If we run this in a none HPOC we must skip the SMTP config as we have no idea what the SMTP server will be
-    if [[ ! -z ${SMTP_SERVER_ADDRESS}  ]]; then
-      pc_smtp
-    fi
+    && pc_smtp
 
     ssp_auth \
     && calm_enable \
-    && lcm \
-    && images \
     && karbon_enable \
+    && objects_enable \
+    && lcm \
+    && object_store \
+    && karbon_image_download \
+    && images \
     && flow_enable \
     && pc_cluster_img_import \
+    && seedPC \
+    && upload_era_calm_blueprint \
     && prism_check 'PC'
 
     log "Non-blocking functions (in development) follow."
@@ -169,8 +202,4 @@ case ${1} in
   FILES | files | afs )
     files_install
   ;;
-  #IMAGES | images )
-  #  . lib.pc.sh
-    #ts_images
-  #;;
 esac
