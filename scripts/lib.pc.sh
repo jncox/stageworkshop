@@ -325,7 +325,7 @@ function object_store() {
     local _url_network='https://localhost:9440/api/nutanix/v3/subnets/list'
     local _url_oss='https://localhost:9440/oss/api/nutanix/v3/objectstores'
     local _url_oss_check='https://localhost:9440/oss/api/nutanix/v3/objectstores/list'
-    
+
 
     # Payload for the _json_data
     _json_data='{"kind":"subnet"}'
@@ -394,13 +394,13 @@ function object_store() {
 function pc_admin() {
   local  _http_body
   local       _test
-  local _admin_user='marklavi'
+  local _admin_user='nathan'
 
   _http_body=$(cat <<EOF
   {"profile":{
     "username":"${_admin_user}",
-    "firstName":"Mark",
-    "lastName":"Lavi",
+    "firstName":"Nathan",
+    "lastName":"Cox",
     "emailId":"${EMAIL}",
     "password":"${PE_PASSWORD}",
     "locale":"en-US"},"enabled":false,"roles":[]}

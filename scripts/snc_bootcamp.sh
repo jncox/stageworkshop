@@ -139,9 +139,9 @@ case ${1} in
     && object_store \
     && karbon_image_download \
     && images \
-    && seedPC \
     && flow_enable \
     && pc_cluster_img_import \
+    && seedPC \
     && prism_check 'PC'
 
     log "Non-blocking functions (in development) follow."
