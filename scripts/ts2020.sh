@@ -32,6 +32,8 @@ case ${1} in
     export   NW2_DHCP_END="${IPV4_PREFIX}.229"
 
     export AUTH_SERVER='AutoAD'
+    export PrismOpsServer='GTSPrismOpsLabUtilityServer'
+    export SeedPC='GTSseedPC.zp'
 
     export _external_nw_name="${1}"
 

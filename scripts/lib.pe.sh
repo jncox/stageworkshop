@@ -229,31 +229,29 @@ function authentication_source() {
 
 function prism_pro_server_deploy() {
 
-VMNAME='PrismProLabUtilityServer'
-
 ### Import Image ###
 
-if (( $(source /etc/profile.d/nutanix_env.sh && acli image.list | grep ${VMNAME} | wc --lines) == 0 )); then
-  log "Import ${VMNAME} image from ${QCOW2_REPOS}..."
-  acli image.create ${VMNAME} \
+if (( $(source /etc/profile.d/nutanix_env.sh && acli image.list | grep ${PrismOpsServer} | wc --lines) == 0 )); then
+  log "Import ${PrismOpsServer} image from ${QCOW2_REPOS}..."
+  acli image.create ${PrismOpsServer} \
     image_type=kDiskImage wait=true \
-    container=${STORAGE_IMAGES} source_url="${QCOW2_REPOS}${VMNAME}.qcow2"
+    container=${STORAGE_IMAGES} source_url="${QCOW2_REPOS}${PrismOpsServer}.qcow2"
 else
-  log "Image found, assuming ready. Skipping ${VMNAME} import."
+  log "Image found, assuming ready. Skipping ${PrismOpsServer} import."
 fi
 
 ### Deploy PrismProServer ###
 
-log "Create ${VMNAME} VM based on ${VMNAME} image"
-acli "vm.create ${VMNAME} num_vcpus=2 num_cores_per_vcpu=1 memory=2G"
+log "Create ${PrismOpsServer} VM based on ${PrismOpsServer} image"
+acli "vm.create ${PrismOpsServer} num_vcpus=2 num_cores_per_vcpu=1 memory=2G"
 # vmstat --wide --unit M --active # suggests 2G sufficient, was 4G
 #acli "vm.disk_create ${VMNAME} cdrom=true empty=true"
-acli "vm.disk_create ${VMNAME} clone_from_image=${VMNAME}"
-acli "vm.nic_create ${VMNAME} network=${NW1_NAME}"
+acli "vm.disk_create ${PrismOpsServer} clone_from_image=${PrismOpsServer}"
+acli "vm.nic_create ${PrismOpsServer} network=${PrismOpsServer}"
 #acli "vm.nic_create ${VMNAME} network=${NW1_NAME} ip=${AUTH_HOST}"
 
-log "Power on ${VMNAME} VM..."
-acli "vm.on ${VMNAME}"
+log "Power on ${VPrismOpsServer} VM..."
+acli "vm.on ${PrismOpsServer}"
 
 
 

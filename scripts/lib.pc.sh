@@ -631,9 +631,9 @@ function seedPC() {
     local _test
     local _setup
 
-    _test=$(curl -L ${PC_DATA} -o /home/nutanix/seedPC.zip)
+    _test=$(curl -L ${PC_DATA} -o /home/nutanix/${SeedPC})
     log "Pulling Prism Data| PC_DATA ${PC_DATA}|${_test}"
-    unzip /home/nutanix/seedPC.zip
+    unzip /home/nutanix/${SeedPC}
     pushd /home/nutanix/lab/
 
     #_setup=$(/home/nutanix/lab/setupEnv.sh ${PC_HOST} > /dev/null 2>&1)

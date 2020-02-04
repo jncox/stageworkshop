@@ -15,8 +15,11 @@ STORAGE_DEFAULT='Default'
 STORAGE_IMAGES='Images'
 ATTEMPTS=40
 SLEEP=60
+PrismOpsServer='PrismProLabUtilityServer'
+SeedPC='seedPC.zp'
 ERA_Blueprint='EraServerDeployment.json'
 Citrix_Blueprint='CitrixBootcampInfra.json'
+Beam_Blueprint=''
 
 # Curl and SSH settings
 CURL_OPTS='--insecure --silent --show-error' # --verbose'
