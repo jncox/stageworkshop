@@ -38,7 +38,7 @@ function log() {
 function checkStagingIsDone
 {
   #Set Variables
-  nodeIP=${1}
+  pcIP=${1}
   clusterPW=${2}
   local _sleep=20m
   local _attempts=7
@@ -50,13 +50,13 @@ function checkStagingIsDone
 #if the snc_bootcamp.sh script is still on the CVM, then the cluster is not yet ready
   while true ; do
   (( _loop++ ))
-  _test=$(sshpass -p $clusterPW ssh -o StrictHostKeyChecking=no nutanix@${PC_HOST} [[ -f /home/nutanix/.staging_complete ]] && echo "ready" || echo "notready")
+  _test=$(sshpass -p "nutanix/4u" ssh -o StrictHostKeyChecking=no nutanix@$pcIP [[ -f /home/nutanix/.staging_complete ]] && echo "ready" || echo "notready")
 
     if [ "$_test" == "ready" ]; then
       log "CVM with IP of $nodeIP is ready"
         return 0
       elif (( _loop > _attempts )); then
-        log "Warning ${_error} @${peIP}: Giving up after ${_loop} tries."
+        log "Warning ${_error} @${pcIP}: Giving up after ${_loop} tries."
         return ${_error}
       else
         log "@${1} ${_loop}/${_attempts}=${_test}: sleep ${_sleep}..."
@@ -191,7 +191,7 @@ EOM
 
       fi
   #Check if the cluster is ready
-  checkStagingIsDone $PE_HOST $PE_PASSWORD
+  checkStagingIsDone $PC_HOST $PE_PASSWORD
   rc=$?
 
   if [ $rc -eq 0 ] ; then
