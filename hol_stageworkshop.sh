@@ -50,7 +50,7 @@ function checkStagingIsDone
 #if the snc_bootcamp.sh script is still on the CVM, then the cluster is not yet ready
   while true ; do
   (( _loop++ ))
-  _test=$(sshpass -p $clusterPW ssh -o StrictHostKeyChecking=no nutanix@${PC_HOST} [[ ! -f /home/nutanix/.staging_complete ]] && echo "ready" || echo "notready")
+  _test=$(sshpass -p $clusterPW ssh -o StrictHostKeyChecking=no nutanix@${PC_HOST} [[ -f /home/nutanix/.staging_complete ]] && echo "ready" || echo "notready")
 
     if [ "$_test" == "ready" ]; then
       log "CVM with IP of $nodeIP is ready"
