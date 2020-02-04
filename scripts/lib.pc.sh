@@ -289,6 +289,18 @@ function objects_enable() {
   local _httpURL_check="https://localhost:9440/oss/api/nutanix/v3/groups"
   local _httpURL="https://localhost:9440/api/nutanix/v3/services/oss"
 
+  # Enable Dark Site Repo and wait 3 seconds
+  mspctl airgap --enable --lcm-server=${OBJECTS_OFFLINE_REPO}
+  sleep 3
+  # Confirm airgap is enabled
+  _response=$(mspctl airgap --status | grep "\"enable\":true" | wc -l)
+
+  if [ $_response -eq 1 ]; then
+    log "Objects dark site staging successfully enabled. Response is $_response. "
+  else
+    log "Objects failed to enable dark site staging. Will use standard WAN download (this will take longer). Response is $_response."
+  fi
+
   # Start the enablement process
   _response=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_set_enable ${_httpURL})
   log "Enabling Objects....."

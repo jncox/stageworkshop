@@ -82,6 +82,7 @@ NW2_DHCP_START="${IPV4_PREFIX}.132"
 NW2_DHCP_END="${IPV4_PREFIX}.253"
 
 # Stuff needed for object_store
+OBJECTS_OFFLINE_REPO='http://10.42.194.11/workshop_staging/objects'
 VLAN=${OCTET[2]}
 NETWORK="${OCTET[0]}.${OCTET[1]}"
 
@@ -174,6 +175,7 @@ case "${OCTET[0]}.${OCTET[1]}" in
     PC_DATA='http://10.42.194.11/workshop_staging/seedPC.zip'
     BLUEPRINT_URL='http://10.42.194.11/workshop_staging/CalmBlueprints/'
     DNS_SERVERS='10.42.196.10,10.42.194.10'
+    OBJECTS_OFFLINE_REPO='http://10.42.194.11/workshop_staging/objects'
     ;;
   10.38 ) # HPOC us-west = PHX 1-Node Clusters
     PC_DEV_METAURL='http://10.42.194.11/workshop_staging/euphrates-5.16-stable-prism_central-metadata.json'
