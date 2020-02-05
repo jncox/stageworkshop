@@ -319,7 +319,7 @@ function create_file_server() {
   local     _external_nw_name="${2}"
   local     _external_nw_uuid
   local                 _test
-  local     _maxtries=20
+  local     _maxtries=5
   local     _tries=0
   local _httpURL="https://localhost:9440/PrismGateway/services/rest/v1/vfilers"
   local _ntp_formatted="$(echo $NTP_SERVERS | sed -r 's/[^,]+/'\"'&'\"'/g')"
@@ -417,9 +417,9 @@ echo $HTTP_JSON_BODY
       log "File Server Not yet created. $_tries/$_maxtries... sleeping 10 seconds"
       sleep 10
       _checkresponse=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_httpURL}| grep $_fileserver_name | wc -l)
-      ((_tries=_tries+1))
+      ((_tries++))
     done
-    if [[ $_checkresponse -eq 1 ]]; do
+    if [[ $_checkresponse -eq 1 ]]; then
       echo "File Server has been created."
     else
       echo "File Server creation failed. Check the staging logs."
