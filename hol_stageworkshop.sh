@@ -3,8 +3,8 @@
 DEBUG=
 
 # Source Workshop common routines + global variables
-. scripts/lib.common.sh
-. scripts/global.vars.sh
+source scripts/lib.common.sh
+source scripts/global.vars.sh
 begin
 
 # For WORKSHOPS keyword mappings to scripts and variables, please use:

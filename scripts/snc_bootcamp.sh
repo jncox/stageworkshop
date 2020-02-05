@@ -4,9 +4,9 @@
 #__main()__________
 
 # Source Nutanix environment (PATH + aliases), then common routines + global variables
-. /etc/profile.d/nutanix_env.sh
-. lib.common.sh
-. global.vars.sh
+source /etc/profile.d/nutanix_env.sh
+source lib.common.sh
+source global.vars.sh
 begin
 
 args_required 'EMAIL PE_PASSWORD PC_VERSION'
