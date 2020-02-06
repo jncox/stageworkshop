@@ -313,11 +313,14 @@ function objects_enable() {
       _response=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_check ${_httpURL_check}| grep "objectstore" | wc -l)
       (( _loops++ ))
     done
-    if [[ $_response -eq 1 ]]
+    if [[ $_response -eq 1 ]]; then
       log "Objects has been enabled."
     else
       log "Objects isn't enabled. Please use the UI to enable it."
     fi
+  else
+    log "No response was received from the API when attempting to enable Objects."
+  fi
 }
 
 ###############################################################################################################################################################################
@@ -385,17 +388,20 @@ function object_store() {
      # The response should be a Task UUID
      if [[ ! -z $_createresponse ]]; then
      # Check if Object store is deployed
-    _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
-    while [[ $_response -ne 1 && $_loops -ne 30 ]]; do
-      log "Object Store not yet created. $_loops/$_attempts... sleeping 10 seconds"
-      sleep 10
       _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
-      (( _loops++ ))
-    done
-    if [[ $_response -eq 1 ]]; then
-      log "Objects store been created."
+      while [[ $_response -ne 1 && $_loops -ne 30 ]]; do
+        log "Object Store not yet created. $_loops/$_attempts... sleeping 10 seconds"
+        sleep 10
+        _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
+        (( _loops++ ))
+      done
+      if [[ $_response -eq 1 ]]; then
+        log "Objects store been created."
+      else
+        log "Objects store could not be created. Please use the UI to create it."
+      fi
     else
-      log "Objects store could not be created. Please use the UI to create it."
+      log "No response received when calling API to create object store."
     fi
 
 }
