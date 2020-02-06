@@ -247,7 +247,7 @@ acli "vm.create ${PrismOpsServer} num_vcpus=2 num_cores_per_vcpu=1 memory=2G"
 # vmstat --wide --unit M --active # suggests 2G sufficient, was 4G
 #acli "vm.disk_create ${VMNAME} cdrom=true empty=true"
 acli "vm.disk_create ${PrismOpsServer} clone_from_image=${PrismOpsServer}"
-acli "vm.nic_create ${PrismOpsServer} network=${PrismOpsServer}"
+acli "vm.nic_create ${PrismOpsServer} network=${NW1_NAME}"
 #acli "vm.nic_create ${VMNAME} network=${NW1_NAME} ip=${AUTH_HOST}"
 
 log "Power on ${VPrismOpsServer} VM..."

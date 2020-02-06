@@ -297,6 +297,7 @@ function objects_enable() {
   local _json_data_check="{\"entity_type\":\"objectstore\"}"
   local _httpURL_check="https://localhost:9440/oss/api/nutanix/v3/groups"
   local _httpURL="https://localhost:9440/api/nutanix/v3/services/oss"
+  local _maxtries=30
 
   # Start the enablement process
   _response=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_set_enable ${_httpURL})
@@ -306,20 +307,17 @@ function objects_enable() {
   if [[ ! -z $_response ]]; then
     # Check if OSS has been enabled
     _response=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_check ${_httpURL_check}| grep "objectstore" | wc -l)
-    while [ $_response -ne 1 ]; do
-        _response=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_check ${_httpURL_check}| grep "objectstore" | wc -l)
-        if [[ $loops -ne 30 ]]; then
-          sleep 10
-          (( _loops++ ))
-        else
-          log "Objects isn't enabled. Please use the UI to enable it."
-          break
-        fi
+    while [[ $_response -ne 1 && $_loops -lt $_maxtries ]]; do
+      log "Objects not yet enabled. $_loops/$_maxtries... sleeping 10 seconds"
+      sleep 10
+      _response=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_check ${_httpURL_check}| grep "objectstore" | wc -l)
+      (( _loops++ ))
     done
-    log "Objects has been enabled."
-  else
-    log "Objects isn't enabled. Please use the UI to enable it."
-  fi
+    if [[ $_response -eq 1 ]]
+      log "Objects has been enabled."
+    else
+      log "Objects isn't enabled. Please use the UI to enable it."
+    fi
 }
 
 ###############################################################################################################################################################################
@@ -380,30 +378,25 @@ function object_store() {
     _json_data_oss=${_json_data_oss//VLANX/${VLAN}}
     _json_data_oss=${_json_data_oss//NETWORKX/${NETWORK}}
 
-    #curl -X POST -d $_json_data_oss $CURL_HTTP_OPTS --user ${PRISM_ADMIN}:${PE_PASSWORD} $_url_oss
+    # Execute API call to create the object store
      _createresponse=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_oss ${_url_oss})
-      log "Creating Object Store....."
+     log "Creating Object Store....."
 
-  # The response should be a Task UUID
-  if [[ ! -z $_createresponse ]]; then
-    # Check if Object store is deployed
+     # The response should be a Task UUID
+     if [[ ! -z $_createresponse ]]; then
+     # Check if Object store is deployed
     _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
-    while [ $_response -ne 1 ]; do
-        log "Object Store not yet created. $_loops/$_attempts... sleeping 10 seconds"
-        _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
-        if [[ $_loops -ne 30 ]]; then
-          _createresponse=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d $_json_data_oss ${_url_oss})
-          sleep 10
-          (( _loops++ ))
-        else
-          log "Objects store ntnx-objects not created. Please use the UI to create it."
-          break
-        fi
+    while [[ $_response -ne 1 && $_loops -ne 30 ]]; do
+      log "Object Store not yet created. $_loops/$_attempts... sleeping 10 seconds"
+      sleep 10
+      _response=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_url_oss_check}| grep "ntnx-objects" | wc -l)
+      (( _loops++ ))
     done
-    log "Objects store been created."
-  else
-    log "Objects store could not be created. Please use the UI to create it."
-  fi
+    if [[ $_response -eq 1 ]]; then
+      log "Objects store been created."
+    else
+      log "Objects store could not be created. Please use the UI to create it."
+    fi
 
 }
 
