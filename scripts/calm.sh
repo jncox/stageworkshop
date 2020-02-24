@@ -18,6 +18,8 @@ case ${1} in
   PE | pe )
     . lib.pe.sh
 
+    export AUTH_SERVER='AutoAD'
+
     args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable
 
@@ -46,7 +48,7 @@ case ${1} in
         log "PE = https://${PE_HOST}:9440"
         log "PC = https://${PC_HOST}:9440"
 
-        files_install && sleep 30 && dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
+        #&& dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
         #dependencies 'remove' 'sshpass'
         finish
       fi
@@ -59,6 +61,23 @@ case ${1} in
   ;;
   PC | pc )
     . lib.pc.sh
+
+    export BUCKETS_DNS_IP="${IPV4_PREFIX}.16"
+    export BUCKETS_VIP="${IPV4_PREFIX}.17"
+    export OBJECTS_NW_START="${IPV4_PREFIX}.18"
+    export OBJECTS_NW_END="${IPV4_PREFIX}.21"
+
+    export QCOW2_IMAGES=(\
+      Windows2016.qcow2 \
+      CentOS7.qcow2 \
+      Win10v1903.qcow2 \
+      ToolsVM.qcow2 \
+      Linux_ToolsVM.qcow2 \
+    )
+    export ISO_IMAGES=(\
+      Citrix_Virtual_Apps_and_Desktops_7_1912.iso \
+      Nutanix-VirtIO-1.1.5.iso \
+    )
 
     run_once
 
@@ -106,12 +125,14 @@ case ${1} in
 
     ssp_auth \
     && calm_enable \
+    && lcm \
+    && pc_project \
     && images \
     && pc_cluster_img_import \
     && prism_check 'PC'
 
     log "Non-blocking functions (in development) follow."
-    pc_project
+    #pc_project
     pc_admin
     # ntnx_download 'AOS' # function in lib.common.sh
 

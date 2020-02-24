@@ -70,7 +70,7 @@ function authentication_source() {
         fi
 
         log "Create ${AUTH_SERVER} VM based on ${AUTH_SERVER} image"
-        acli "vm.create ${AUTH_SERVER} num_vcpus=2 num_cores_per_vcpu=1 memory=2G"
+        acli "vm.create ${AUTH_SERVER} num_vcpus=2 num_cores_per_vcpu=1 memory=4G"
         # vmstat --wide --unit M --active # suggests 2G sufficient, was 4G
         #acli "vm.disk_create ${AUTH_SERVER}${_autodc_release} cdrom=true empty=true"
         acli "vm.disk_create ${AUTH_SERVER} clone_from_image=${AUTH_SERVER}"
@@ -322,8 +322,13 @@ function create_file_server() {
   local     _maxtries=30
   local     _tries=0
   local _httpURL="https://localhost:9440/PrismGateway/services/rest/v1/vfilers"
+  local _grab_afs_version="https://localhost:9440/PrismGateway/services/rest/v1/upgrade/afs/softwares"
   local _ntp_formatted="$(echo $NTP_SERVERS | sed -r 's/[^,]+/'\"'&'\"'/g')"
 
+  # Get dynamically the version of the AFS that has been installed
+  afs_version=$(curl ${CURL_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET ${_grab_afs_version} | jq '.entities[] | select (.status=="COMPLETED") .version' | tr -d \")
+
+  log "Found installed version: $afs_version of Nutanix Files..."
 
   echo "Get cluster network and storage container UUIDs..."
   _internal_nw_uuid=$(acli net.get ${_internal_nw_name} \
@@ -370,7 +375,7 @@ function create_file_server() {
       ${_ntp_formatted}
    ],
    "sizeGib":"1024",
-   "version":"${FILES_VERSION}",
+   "version":"${afs_version}",
    "dnsDomainName":"${AUTH_FQDN}",
    "nameServicesDTO":{
       "adDetails":{
@@ -429,11 +434,102 @@ echo $HTTP_JSON_BODY
   fi
 }
 
+###############################################################################################################################################################################
+# Create File Analytics Server
+###############################################################################################################################################################################
 
+function create_file_analytics_server() {
+  #local CURL_HTTP_OPTS=' --max-time 25 --silent --show-error --header Content-Type:application/json --header Accept:application/json --insecure '
+  local _file_analytics_server_name="BootcampFileAnalytics"
+  local _nw_name="${NW1_NAME}"
+  local _nw_uuid
+  local _test
+  local _maxtries=30
+  local _tries=0
+  local _ntp_formatted="$(echo $NTP_SERVERS | sed -r 's/[^,]+/'\"'&'\"'/g')"
+  local CURL_HTTP_OPTS=" --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure "
+
+  log "Installing File Analytics version: ${FILE_ANALYTICS_VERSION}"
+
+  echo "Get cluster network and storage container UUIDs..."
+
+  # Get the Network UUIDs
+  #_nw_uuid=$(acli net.get ${_nw_name} | grep "uuid" | cut -f 2 -d ':' | xargs)
+  log "Get cluster network UUID"
+
+  #_nw_uuid=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"subnet","filter": "name==Primary"}' 'https://localhost:9440/api/nutanix/v3/subnets/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  #_nw_uuid=$(curl ${CURL_HTTP_OPTS} -X POST 'https://localhost:9440/api/nutanix/v3/subnets/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"subnet","filter": "name==Secondary"}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  _nw_uuid=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"subnet","filter": "name==Secondary"}' 'https://localhost:9440/api/nutanix/v3/subnets/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  # Get the Container UUIDs
+  log "Get ${STORAGE_DEFAULT} Container UUID"
+  _storage_default_uuid=$(ncli container ls name=${STORAGE_DEFAULT} | grep Uuid | grep -v Pool | cut -f 2 -d ':' | xargs)
+
+  echo "${_nw_name} network UUID: ${_nw_uuid}"
+  echo "${STORAGE_DEFAULT} storage container UUID: ${_storage_default_uuid}"
+
+
+HTTP_JSON_BODY=$(cat <<EOF
+{
+                "image_version": "${FILE_ANALYTICS_VERSION}",
+                "vm_name": "${_file_analytics_server_name}",
+                "container_uuid": "${_storage_default_uuid}",
+                "container_name": "${STORAGE_DEFAULT}",
+                "network": {
+                                "uuid": "${_nw_uuid}",
+                                "ip": "",
+                                "netmask": "",
+                                "gateway": ""
+                },
+                "resource": {
+                                "memory": "24",
+                                "cores": "2",
+                                "vcpu": "4"
+                },
+                "dns_servers": ["${AUTH_HOST}"],
+                "ntp_servers": [${_ntp_formatted}],
+                "disk_size": "3"
+}
+EOF
+)
+
+  # Start the create process
+  #_response=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d ${HTTP_JSON_BODY} ${_httpURL}| grep "taskUuid" | wc -l)
+
+  # execute the API call to create the file analytics server
+  #_response=$(curl ${CURL_POST_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data "${HTTP_JSON_BODY}" 'https://localhost:9440/PrismGateway/services/rest/v2.0/analyticsplatform' | grep "taskUuid" | wc -l)
+  echo "Creating File Anlytics Server Now"
+  echo $HTTP_JSON_BODY
+
+  #curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/PrismGateway/services/rest/v2.0/analyticsplatform' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data "${HTTP_JSON_BODY}"
+
+  #sleep 300
+
+  _task_id=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data "${HTTP_JSON_BODY}" 'https://localhost:9440/PrismGateway/services/rest/v2.0/analyticsplatform' | jq -r '.task_uuid' | tr -d \")
+
+  log "Task uuid for the FileAnalytics server is " $_task_id " ....."
+
+  # If there has been a reply (task_id) then the URL has accepted by PC
+  # Changed (()) to [] so it works....
+
+  if [ -z "$_task_id" ]; then
+       log "File Analytics Deploy has encountered an eror..."
+  else
+       log "File Analytics Deploy started.."
+       set _loops=0 # Reset the loop counter so we restart the amount of loops we need to run
+      # Run the progess checker
+       loop
+  fi
+
+}
 
 ###############################################################################################################################################################################
 # Routine to create the networks
 ###############################################################################################################################################################################
+
+
 function network_configure() {
   local _network_name="${NW1_NAME}"
 
@@ -454,13 +550,13 @@ function network_configure() {
 
     log "Create primary network: Name: ${NW1_NAME}, VLAN: ${NW1_VLAN}, Subnet: ${NW1_SUBNET}, Domain: ${AUTH_DOMAIN}, Pool: ${NW1_DHCP_START} to ${NW1_DHCP_END}"
     acli "net.create ${NW1_NAME} vlan=${NW1_VLAN} ip_config=${NW1_SUBNET}"
-    acli "net.update_dhcp_dns ${NW1_NAME} servers=${AUTH_HOST},${DNS_SERVERS} domains=${AUTH_DOMAIN}"
+    acli "net.update_dhcp_dns ${NW1_NAME} servers=${AUTH_HOST},${DNS_SERVERS} domains=${AUTH_FQDN}"
     acli "  net.add_dhcp_pool ${NW1_NAME} start=${NW1_DHCP_START} end=${NW1_DHCP_END}"
 
     if [[ ! -z "${NW2_NAME}" ]]; then
       log "Create secondary network: Name: ${NW2_NAME}, VLAN: ${NW2_VLAN}, Subnet: ${NW2_SUBNET}, Pool: ${NW2_DHCP_START} to ${NW2_DHCP_END}"
       acli "net.create ${NW2_NAME} vlan=${NW2_VLAN} ip_config=${NW2_SUBNET}"
-      acli "net.update_dhcp_dns ${NW2_NAME} servers=${AUTH_HOST},${DNS_SERVERS} domains=${AUTH_DOMAIN}"
+      acli "net.update_dhcp_dns ${NW2_NAME} servers=${AUTH_HOST},${DNS_SERVERS} domains=${AUTH_FQDN}"
       acli "  net.add_dhcp_pool ${NW2_NAME} start=${NW2_DHCP_START} end=${NW2_DHCP_END}"
     fi
   fi
@@ -528,7 +624,7 @@ function pc_configure() {
   ## TODO: If DEBUG is set, we run the below command with bash -x
   _command="EMAIL=${EMAIL} \
     PC_HOST=${PC_HOST} PE_HOST=${PE_HOST} PE_PASSWORD=${PE_PASSWORD} \
-    PC_LAUNCH=${PC_LAUNCH} PC_VERSION=${PC_VERSION} nohup bash ${HOME}/${PC_LAUNCH} PC"
+    PC_LAUNCH=${PC_LAUNCH} PC_VERSION=${PC_VERSION} nohup bash -x ${HOME}/${PC_LAUNCH} PC"
   log "Remote asynchroneous launch PC configuration script... ${_command}"
   remote_exec 'ssh' 'PC' "${_command} >> ${HOME}/${PC_LAUNCH%%.sh}.log 2>&1 &"
   log "PC Configuration complete: try Validate Staged Clusters now."
@@ -799,4 +895,74 @@ function pc_destroy() {
     log "PC vm.uuid=${_vm}"
     acli vm.off ${_vm} && acli -y vm.delete ${_vm}
   done
+}
+
+###############################################################################################################################################################################
+# Routine to deploy the Peer Management Center
+###############################################################################################################################################################################
+# MTM TODO When integrating with Nutanix scripts, need to change echo to log and put quotes around text after all acli commands
+function deploy_peer_mgmt_server() {
+
+  if (( $(source /etc/profile.d/nutanix_env.sh && acli image.list | grep ${PeerMgmtServer} | wc --lines) == 0 )); then
+    log "Import ${PeerMgmtServer} image from ${QCOW2_REPOS}..."
+    acli image.create ${PeerMgmtServer} \
+      image_type=kDiskImage wait=true \
+      container=${STORAGE_IMAGES} source_url="${QCOW2_REPOS}peer/${PeerMgmtServer}.qcow2"
+  else
+    log "Image found, assuming ready. Skipping ${PeerMgmtServer} import."
+  fi
+  echo "Creating temp folder and applying perms..."
+  mkdir /home/nutanix/peer_staging/
+  VMNAME=$1
+  ### Get sysyprep config file ready ###
+  echo "${VMNAME} - Prepping sysprep config..."
+  wget http://10.42.194.11/workshop_staging/peer/unattend-pmc.xml -P /home/nutanix/peer_staging/
+  mv /home/nutanix/peer_staging/unattend-pmc.xml /home/nutanix/peer_staging/unattend_${VMNAME}.xml
+  chmod 777 /home/nutanix/peer_staging/unattend_${VMNAME}.xml
+  sed -i "s/<ComputerName>.*<\/ComputerName>/<ComputerName>${VMNAME}<\/ComputerName>/g" /home/nutanix/peer_staging/unattend_${VMNAME}.xml
+  ### Deploy PMC Server ###
+  echo "${VMNAME} - Deploying VM..."
+  #log "Create ${VMNAME} VM based on ${IMAGENAME} image"
+  acli "uhura.vm.create_with_customize ${VMNAME} num_vcpus=2 num_cores_per_vcpu=2 memory=4G sysprep_config_path=file:///home/nutanix/peer_staging/unattend_${VMNAME}.xml"
+  acli "vm.disk_create ${VMNAME} clone_from_image=${PeerMgmtServer}"
+  # MTM TODO replace net1 with appropriate variable
+  acli "vm.nic_create ${VMNAME} network=${NW2_NAME}"
+  #log "Power on ${VMNAME} VM..."
+  echo "${VMNAME} - Powering on..."
+  acli "vm.on ${VMNAME}"
+  echo "${VMNAME} - Deployed."
+}
+
+###############################################################################################################################################################################
+# Routine to deploy a Peer Agent
+###############################################################################################################################################################################
+# MTM TODO When integrating with Nutanix scripts, need to change echo to log and put quotes around text after all acli commands
+function deploy_peer_agent_server() {
+
+  if (( $(source /etc/profile.d/nutanix_env.sh && acli image.list | grep ${PeerAgentServer} | wc --lines) == 0 )); then
+    log "Import ${PeerAgentServer} image from ${QCOW2_REPOS}..."
+    acli image.create ${PeerAgentServer} \
+      image_type=kDiskImage wait=true \
+      container=${STORAGE_IMAGES} source_url="${QCOW2_REPOS}peer/${PeerAgentServer}.qcow2"
+  else
+    log "Image found, assuming ready. Skipping ${PeerAgentServer} import."
+  fi
+  VMNAME=$1
+  ### Get sysyprep config file ready ###
+  echo "${VMNAME} - Prepping sysprep config..."
+  wget http://10.42.194.11/workshop_staging/peer/unattend-agent.xml -P /home/nutanix/peer_staging/
+  mv /home/nutanix/peer_staging/unattend-agent.xml /home/nutanix/peer_staging/unattend_${VMNAME}.xml
+  chmod 777 /home/nutanix/peer_staging/unattend_${VMNAME}.xml
+  sed -i "s/<ComputerName>.*<\/ComputerName>/<ComputerName>${VMNAME}<\/ComputerName>/g" /home/nutanix/peer_staging/unattend_${VMNAME}.xml
+  ### Deploy Agent Server ###
+  echo "${VMNAME} - Deploying VM..."
+  #log "Create ${VMNAME} VM based on ${IMAGENAME} image"
+  acli "uhura.vm.create_with_customize ${VMNAME} num_vcpus=2 num_cores_per_vcpu=2 memory=4G sysprep_config_path=file:///home/nutanix/peer_staging/unattend_${VMNAME}.xml"
+  acli "vm.disk_create ${VMNAME} clone_from_image=${PeerAgentServer}"
+  # MTM TODO replace net1 with appropriate variable
+  acli "vm.nic_create ${VMNAME} network=${NW2_NAME}"
+  #log "Power on ${VMNAME} VM..."
+  echo "${VMNAME} - Powering on..."
+  acli "vm.on ${VMNAME}"
+  echo "${VMNAME} - Deployed."
 }

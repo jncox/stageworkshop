@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# -x
+ #-x
 
 #__main()__________
 
@@ -46,7 +46,15 @@ case ${1} in
     && network_configure \
     && authentication_source \
     && pe_auth \
-    && prism_pro_server_deploy
+    && prism_pro_server_deploy \
+    && files_install \
+    && sleep 30 \
+    && create_file_server "${NW1_NAME}" "${NW2_NAME}" \
+    && sleep 30 \
+    && file_analytics_install \
+    && sleep 30 \
+    && create_file_analytics_server \
+    && sleep 30
 
     if (( $? == 0 )) ; then
       pc_install "${NW1_NAME}" \
@@ -66,11 +74,10 @@ case ${1} in
         log "PE = https://${PE_HOST}:9440"
         log "PC = https://${PC_HOST}:9440"
 
-        files_install && sleep 30
-
-        create_file_server "${NW1_NAME}" "${NW2_NAME}" && sleep 30
-
-        file_analytics_install && sleep 30 && dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
+        deploy_peer_mgmt_server "${PMC}" \
+        && deploy_peer_agent_server "${AGENTA}" \
+        && deploy_peer_agent_server "${AGENTB}"
+        #&& dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
         #dependencies 'remove' 'sshpass'
         finish
       fi
@@ -84,29 +91,40 @@ case ${1} in
   PC | pc )
     . lib.pc.sh
 
+    export BUCKETS_DNS_IP="${IPV4_PREFIX}.16"
+    export BUCKETS_VIP="${IPV4_PREFIX}.17"
+    export OBJECTS_NW_START="${IPV4_PREFIX}.18"
+    export OBJECTS_NW_END="${IPV4_PREFIX}.21"
+
     export QCOW2_IMAGES=(\
-      CentOS7.qcow2 \
-      Windows2016.qcow2 \
-      Windows2012R2.qcow2 \
-      Windows10-1709.qcow2 \
-      ToolsVM.qcow2 \
-      Linux_ToolsVM.qcow2 \
       ERA-Server-build-1.2.0.1.qcow2 \
-      MSSQL-2016-VM.qcow2 \
-      HYCU/Mine/HYCU-4.0.3-Demo.qcow2 \
-      VeeamAvailability_1.0.457.vmdk \
+      Windows2016.qcow2 \
+      CentOS7.qcow2 \
+      Win10v1903.qcow2 \
+      WinToolsVM.qcow2 \
+      Linux_ToolsVM.qcow2 \
       move-3.4.1.qcow2 \
-      AutoXD.qcow2 \
+      MSSQL-2016-VM.qcow2 \
+      GTSOracle/19c-april/19c-bootdisk.qcow2 \
+      GTSOracle/19c-april/19c-disk1.qcow2 \
+      GTSOracle/19c-april/19c-disk2.qcow2 \
+      GTSOracle/19c-april/19c-disk3.qcow2 \
+      GTSOracle/19c-april/19c-disk4.qcow2 \
+      GTSOracle/19c-april/19c-disk5.qcow2 \
+      GTSOracle/19c-april/19c-disk6.qcow2 \
+      GTSOracle/19c-april/19c-disk7.qcow2 \
+      GTSOracle/19c-april/19c-disk8.qcow2 \
+      GTSOracle/19c-april/19c-disk9.qcow2 \
+      HYCU/Mine/HYCU-4.0.3-Demo.qcow2 \
+      veeam/VeeamAHVProxy2.0.404.qcow2 \
     )
     export ISO_IMAGES=(\
-      CentOS7.iso \
-      Windows2016.iso \
-      Windows2012R2.iso \
-      Windows10.iso \
-      Nutanix-VirtIO-1.1.5.iso \
-      SQLServer2014SP3.iso \
       Citrix_Virtual_Apps_and_Desktops_7_1912.iso \
-      VeeamBR_9.5.4.2615.Update4.iso \
+      Nutanix-VirtIO-1.1.5.iso \
+      FrameCCA-2.1.6.iso \
+      FrameCCA-2.1.0.iso \
+      FrameGuestAgentInstaller_1.0.2.2_7930.iso \
+      veeam/VBR_10.0.0.4442.iso \
     )
 
 
@@ -155,17 +173,25 @@ case ${1} in
     && karbon_enable \
     && objects_enable \
     && lcm \
+    && pc_project \
     && object_store \
     && karbon_image_download \
-    && images \
+    && priority_images \
     && flow_enable \
     && pc_cluster_img_import \
-    && seedPC \
+    && upload_citrix_calm_blueprint \
+    && sleep 30 \
     && upload_era_calm_blueprint \
+    && sleep 30 \
+    && upload_karbon_calm_blueprint \
+    && sleep 30 \
+    && upload_CICDInfra_calm_blueprint \
+    && seedPC \
+    && images \
     && prism_check 'PC'
 
     log "Non-blocking functions (in development) follow."
-    pc_project
+    #pc_project
     pc_admin
     # ntnx_download 'AOS' # function in lib.common.sh
 

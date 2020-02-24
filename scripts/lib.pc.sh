@@ -44,12 +44,13 @@ function flow_enable() {
   # Try one more time then fail, but continue
   if [ -z $_task_id ]; then
     log "Flow not yet enabled. Will retry...."
-    _task_id=$(curl -X POST $_json_data $CURL_HTTP_OPTS --user ${PRISM_ADMIN}:${PE_PASSWORD} $_url_flow)
+    _task_id=$(curl -X POST $_json_data $CURL_HTTP_OPTS --user ${PRISM_ADMIN}:${PE_PASSWORD} $_url_flow | jq '.task_uuid' | tr -d \")
 
     if [ -z $_task_id ]; then
       log "Flow still not enabled.... ***Not retrying. Please enable via UI.***"
     fi
   else
+    loop ${_task_id}
     log "Flow has been Enabled..."
   fi
 
@@ -57,38 +58,7 @@ function flow_enable() {
 
 }
 
-###############################################################################################################################################################################
-# Routine to be run/loop till yes we are ok.
-###############################################################################################################################################################################
-# Need to grab the percentage_complete value including the status to make disissions
 
-# TODO: Also look at the status!!
-
-function loop(){
-
-  local _attempts=45
-  local _loops=0
-  local _sleep=60
-  local CURL_HTTP_OPTS=" --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure "
-
-  # What is the progress of the taskid??
-  while true; do
-    (( _loops++ ))
-    # Get the progress of the task
-    _progress=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} ${_url_progress}/${_task_id} | jq '.percentage_complete' 2>nul | tr -d \")
-
-    if (( ${_progress} == 100 )); then
-      log "The step has been succesfuly run"
-      break;
-    elif (( ${_loops} > ${_attempts} )); then
-      log "Warning ${_error} @${1}: Giving up after ${_loop} tries."
-      return ${_error}
-    else
-      log "Still running... loop $_loops/$_attempts. Step is at ${_progress}% ...Sleeping ${_sleep} seconds"
-      sleep ${_sleep}
-    fi
-  done
-}
 
 ###############################################################################################################################################################################
 # Routine to start the LCM Inventory and the update.
@@ -100,6 +70,10 @@ function lcm() {
   local _url_progress='https://localhost:9440/api/nutanix/v3/tasks'
   local _url_groups='https://localhost:9440/api/nutanix/v3/groups'
   local CURL_HTTP_OPTS=' --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure '
+
+  # Reset the variables we use so we're not adding extra values to the arrays
+  unset uuid_arr
+  unset version_ar
 
   # Inventory download/run
   _task_id=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d '{"value":"{\".oid\":\"LifeCycleManager\",\".method\":\"lcm_framework_rpc\",\".kwargs\":{\"method_class\":\"LcmFramework\",\"method\":\"perform_inventory\",\"args\":[\"http://download.nutanix.com/lcm/2.0\"]}}"}' ${_url_lcm} | jq '.value' 2>nul | cut -d "\\" -f 4 | tr -d \")
@@ -155,7 +129,7 @@ function lcm() {
               for uuid in "${uuid_arr[@]}"
                 do
                   # Get the latest version from the to be updated uuid
-                  version_ar+=($(jq --arg uuid "$uuid" '.group_results[].entity_results[] | select (.data[].values[].values[]==$uuid) .data[] | select (.name=="version") .values[].values[]' reply_json_ver.json | tail -1 | tr -d \"))
+                  version_ar+=($(jq --arg uuid "$uuid" '.group_results[].entity_results[] | select (.data[].values[].values[]==$uuid) .data[] | select (.name=="version") .values[].values[]' reply_json_ver.json | sort |tail -1 | tr -d \"))
                 done
               # Copy the right info into the to be used array
         fi
@@ -262,21 +236,22 @@ function karbon_enable() {
 function karbon_image_download() {
   local CURL_HTTP_OPTS=' --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure '
   local _loop=0
-  local _startDownload="https://localhost:7050/acs/image/download"
-  local _getuuidDownload="https://localhost:7050/acs/image/list"
+  local _cookies=''NTNX_IGW_SESSION': resp.cookies['NTNX_IGW_SESSION']'
+  local _startDownload="https://localhost:9440/karbon/acs/image/download"
+  local _getuuidDownload="https://localhost:9440/karbon/acs/image/list"
 
   # Create the Basic Authentication using base6 commands
   _auth=$(echo "admin:${PE_PASSWORD}" | base64)
 
   # Call the UUID URL so we have the right UUID for the image
-  uuid=$(curl -X GET -H "X-NTNX-AUTH: Basic ${_auth}" https://localhost:7050/acs/image/list $CURL_HTTP_OPTS | jq '.[0].uuid' | tr -d \/\")
+  uuid=$(curl -X GET -H "X-NTNX-AUTH: Basic ${_auth}" https://localhost:9440/karbon/acs/image/list $CURL_HTTP_OPTS | jq '.[0].uuid' | tr -d \/\")
   log "UUID for The Karbon image is: $uuid"
 
   # Use the UUID to download the image
   response=$(curl -X POST ${_startDownload} -d "{\"uuid\":\"${uuid}\"}" -H "X-NTNX-AUTH: Basic ${_auth}" ${CURL_HTTP_OPTS})
 
   if [ -z $response ]; then
-    log "Download of the CenOS image for Karbon has not been started. Trying one more time..."
+    log "Download of the CentOS image for Karbon has not been started. Trying one more time..."
     response=$(curl -X POST ${_startDownload} -d "{\"uuid\":\"${uuid}\"}" -H "X-NTNX-AUTH: Basic ${_auth}" ${CURL_HTTP_OPTS})
     if [ -z $response ]; then
       log "Download of CentOS image for Karbon failed... Please run manually."
@@ -450,9 +425,9 @@ function pc_auth() {
 
   # TODO:50 FUTURE: pass AUTH_SERVER argument
 
-  log "Add Directory ${AUTH_SERVER}"
+  log "Add Directory ${AUTH_DOMAIN}"
   _http_body=$(cat <<EOF
-{"name":"${AUTH_SERVER}","domain":"${AUTH_FQDN}","directoryType":"ACTIVE_DIRECTORY","connectionType":"LDAP",
+{"name":"${AUTH_DOMAIN}","domain":"${AUTH_FQDN}","directoryType":"ACTIVE_DIRECTORY","connectionType":"LDAP",
 EOF
   )
 
@@ -671,7 +646,7 @@ function ssp_auth() {
   log "_ldap_uuid=|${_ldap_uuid}|"
 
   # TODO:110 get directory service name _ldap_name
-  _ldap_name=${AUTH_SERVER}
+  _ldap_name=${AUTH_DOMAIN}
   # TODO:140 bats? test ldap connection
 
   log "Connect SSP Authentication (spec-ssp-authrole.json)..."
@@ -839,355 +814,9 @@ function calm_enable() {
   done
 }
 
-###############################################################################################################################################################################
-# Routine to upload Citrix Calm Blueprint and set variables
-###############################################################################################################################################################################
-
-function upload_citrix_calm_blueprint() {
-  local DIRECTORY="/home/nutanix/"
-  local CALM_PROJECT="default"
-  local DOMAIN=${AUTH_FQDN}
-  local AD_IP=${AUTH_HOST}
-  local PE_IP=${PE_HOST}
-  local NutanixAcropolisPlugin="none"
-  local CVM_NETWORK=${NW1_NAME}
-  local BPG_RKTOOLS_URL="none"
-  local DDC_IP=${CITRIX_DDC_HOST}
-  local NutanixAcropolis_Installed_Path="none"
-
-  local VLAN_NAME=${NW1_VLAN}
-  local DOWNLOAD_BLUEPRINTS
-
-  # download the blueprint
-  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${CALM_Blueprint} -o ${DIRECTORY}${CALM_Blueprint)
-  log "Downloading ${CALM_Blueprint} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
-
-  # ensure the directory that contains the blueprints to be imported is not empty
-  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
-      echo "There are no .json files found in the directory provided."
-      exit 0
-  fi
-
-  # create a list to store all bluprints found in the directory provided by user
-  declare -a LIST_OF_BLUEPRINTS=()
-
-  # circle thru all of the files in the provided directory and add file names to a list of blueprints array
-  # IMPORTANT NOTE: THE FILES NAMES FOR THE JSON FILES BEING IMPORTED CAN'T HAVE ANY SPACES (IN THIS SCRIPT)
-  for FILE in "$DIRECTORY"/*.json; do
-      BASENAM="$(basename ${FILE})"
-      FILENAME="${BASENAM%.*}"
-      LIST_OF_BLUEPRINTS+=("$BASENAM")
-  done
-
-  # echo $LIST_OF_BLUEPRINTS
-  # if the list of blueprints is not empty then:
-  if ((${#LIST_OF_BLUEPRINTS[@]})); then
-      #   first check if the user has specified a project for the imported blueprints
-      #   if they did, we need to make sure the project exists before assigning it to the BPs
-
-      if [ $CALM_PROJECT != 'none' ]; then
-
-          # curl command needed:
-          # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
-
-          # formulate the curl to check for project
-          _url_pc="https://localhost:9440/api/nutanix/v3/projects/list"
-
-          # make API call and store project_uuid
-          project_uuid=$(curl -s -k -X POST $_url_pc -H 'Content-Type: application/json' --user ${PRISM_ADMIN}:${PE_PASSWORD} -d "{\"kind\": \"project\", \"filter\": \"name==$CALM_PROJECT\"}" | jq -r '.entities[].metadata.uuid')
-
-          if [ -z "$project_uuid" ]; then
-              # project wasn't found
-              # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
-              echo "\nProject $CALM_PROJECT was not found. Please check the name and retry."
-              exit 0
-          else
-              echo "\nProject $CALM_PROJECT exists..."
-          fi
-      fi
-  else
-      echo '\nNo JSON files found in' + $DIRECTORY +' ... nothing to import!'
-  fi
-
-  # update the user with script progress...
-  _num_of_files=${#LIST_OF_BLUEPRINTS[@]}
-  echo "\nNumber of .json files found: ${_num_of_files}"
-  echo "\nStarting blueprint updates and then exporting to Calm one file at a time...\n\n"
-
-  # go through the blueprint JSON files list found in the specified directory
-  for elem in "${LIST_OF_BLUEPRINTS[@]}"; do
-      # read the entire JSON file from the directory
-      JSONFile=${DIRECTORY}/"$elem"
-
-      echo "\nCurrently updating blueprint $JSONFile..."
-
-      # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
-      tmp=$(mktemp)
-
-      # ADD PROJECT (affects all BPs being imported) if no project was specified on the command line, we've already pre-set the project variable to 'none' if a project was specified, we need to add it into the JSON data
-      if [ $CALM_PROJECT != 'none' ]; then
-          # add the new atributes to the JSON and overwrite the old JSON file with the new one
-          $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
-      fi
-
-      # ADD VARIABLES (affects ONLY if the current blueprint being imported MATCHES the name specified earlier "EraServerDeployment.json")
-      if [ "$elem" == "${NAME}" ]; then
-          if [ "$DOMAIN" != "none" ]; then
-              tmp_DOMAIN=$(mktemp)
-              # add the new variable to the json file and save it
-              $(jq --arg var_name $DOMAIN'(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="DOMAIN")).value=$var_name' $JSONFile >"$tmp_DOMAIN" && mv "$tmp_DOMAIN" $JSONFile)
-          fi
-          if [ "$AD_IP" != "none" ]; then
-              tmp_AD_IP=$(mktemp)
-              $(jq --arg var_name $AD_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="AD_IP")).value=$var_name' $JSONFile >"$tmp_AD_IP" && mv "$tmp_AD_IP" $JSONFile)
-          fi
-          if [ "$PE_IP" != "none" ]; then
-              tmp_PE_IP=$(mktemp)
-              $(jq --arg var_name $PE_IP'(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_IP")).value=$var_name' $JSONFile >"$tmp_PE_IP" && mv "$tmp_PE_IP" $JSONFile)
-          fi
-          if [ "$NutanixAcropolisPlugin" != "none" ]; then
-              tmp_NutanixAcropolisPluginE=$(mktemp)
-              $(jq --arg var_name $NutanixAcropolisPlugin '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="NutanixAcropolisPlugin")).value=$var_name' $JSONFile >"$tmp_NutanixAcropolisPlugin" && mv "$tmp_NutanixAcropolisPlugin" $JSONFile)
-          fi
-          if [ "$CVM_NETWORK" != "none" ]; then
-              tmp_CVM_NETWORK=$(mktemp)
-              $(jq --arg var_name $CVM_NETWORK '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CVM_NETWORK")).value=$var_name' $JSONFile >"$tmp_CVM_NETWORK" && mv "$tmp_CVM_NETWORK" $JSONFile)
-          fi
-          if [ "$BPG_RKTOOLS_URL" != "none" ]; then
-              tmp_BPG_RKTOOLS_URL=$(mktemp)
-              $(jq --arg var_name $VLAN_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="BPG_RKTOOLS_URL")).value=$var_name' $JSONFile >"$tmp_BPG_RKTOOLS_URL" && mv "$tmp_BPG_RKTOOLS_URL" $JSONFile)
-          fi
-          if [ "$DDC_IP" != "none" ]; then
-              tmp_DDC_IP=$(mktemp)
-              $(jq --arg var_name $DDC_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="DDC_IP")).value=$var_name' $JSONFile >"$tmp_DDC_IP" && mv "$tmp_DDC_IP" $JSONFile)
-          fi
-          if [ "$NutanixAcropolis_Installed_Path" != "none" ]; then
-              tmp_NutanixAcropolis_Installed_Path=$(mktemp)
-              $(jq --arg var_name $NutanixAcropolis_Installed_Path '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="NutanixAcropolis_Installed_PathL")).value=$var_name' $JSONFile >"$tmp_NutanixAcropolis_Installed_Path" && mv "$tmp_NutanixAcropolis_Installed_Path" $JSONFile)
-          fi
-      fi
-
-      # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
-      tmp_removal=$(mktemp)
-      $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
-
-      # GET BP NAME (affects all BPs being imported)
-      # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
-      blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
-      blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
-      blueprint_name="${blueprint_name#\"}" # will remove the prefix "
-
-      if [ blueprint_name == 'null' ]; then
-          echo "\nUnprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?\n"
-          exit 0
-      else
-          # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
-          echo "\nUploading the updated blueprint: $blueprint_name...\n"
-
-          # Example curl call from the console:
-          # url="https://10.42.7.39:9440/api/nutanix/v3/blueprints/import_file"
-          # path_to_file="/Users/sharon.santana/Desktop/saved_blueprints/EraServerDeployment.json"
-          # bp_name="EraServerDeployment"
-          # project_uuid="a944258a-fd8a-4d02-8646-72c311e03747"
-          # password='techX2019!'
-          # curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password"
-
-          url="https://localhost:9440/api/nutanix/v3/blueprints/import_file"
-          path_to_file=$JSONFile
-          bp_name=$blueprint_name
-          project_uuid=$project_uuid
-          password=$PE_PASSWORD
-          upload_result=$(curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password")
-
-          #if the upload_result var is not empty then let's say it was succcessful
-          if [ -z "$upload_result" ]; then
-              echo "\nUpload for $bp_name did not finish."
-          else
-              echo "\nUpload for $bp_name finished."
-              echo "-----------------------------------------"
-              # echo "Result: $upload_result"
-          fi
-      fi
-
-    done
-
-    echo "\nFinished uploading Citrix Blueprint and setting Variables!\n"
-
-}
-
-###############################################################################################################################################################################
-# Routine to upload Era Calm Blueprint and set variables
-###############################################################################################################################################################################
-
-function upload_era_calm_blueprint() {
-  local DIRECTORY="/home/nutanix/"
-  local CALM_PROJECT="default"
-  local ERA_IP=${ERA_HOST}
-  local PE_IP=${PE_HOST}
-  local CLSTR_NAME="none"
-  local CTR_UUID=${_storage_default_uuid}
-  local CTR_NAME=${STORAGE_DEFAULT}
-  local NETWORK_NAME=${NW1_NAME}
-  local VLAN_NAME=${NW1_VLAN}
-  local DOWNLOAD_BLUEPRINTS
 
 
 
-  # download the blueprint
-  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${ERA_Blueprint} -o ${DIRECTORY}${ERA_Blueprint})
-  log "Downloading ${ERA_Blueprint} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
-
-  # ensure the directory that contains the blueprints to be imported is not empty
-  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
-      echo "There are no .json files found in the directory provided."
-      exit 0
-  fi
-
-  # create a list to store all bluprints found in the directory provided by user
-  declare -a LIST_OF_BLUEPRINTS=()
-
-  # circle thru all of the files in the provided directory and add file names to a list of blueprints array
-  # IMPORTANT NOTE: THE FILES NAMES FOR THE JSON FILES BEING IMPORTED CAN'T HAVE ANY SPACES (IN THIS SCRIPT)
-  for FILE in "$DIRECTORY"/*.json; do
-      BASENAM="$(basename ${FILE})"
-      FILENAME="${BASENAM%.*}"
-      LIST_OF_BLUEPRINTS+=("$BASENAM")
-  done
-
-  # echo $LIST_OF_BLUEPRINTS
-  # if the list of blueprints is not empty then:
-  if ((${#LIST_OF_BLUEPRINTS[@]})); then
-      #   first check if the user has specified a project for the imported blueprints
-      #   if they did, we need to make sure the project exists before assigning it to the BPs
-
-      if [ $CALM_PROJECT != 'none' ]; then
-
-          # curl command needed:
-          # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
-
-          # formulate the curl to check for project
-          _url_pc="https://localhost:9440/api/nutanix/v3/projects/list"
-
-          # make API call and store project_uuid
-          project_uuid=$(curl -s -k -X POST $_url_pc -H 'Content-Type: application/json' --user ${PRISM_ADMIN}:${PE_PASSWORD} -d "{\"kind\": \"project\", \"filter\": \"name==$CALM_PROJECT\"}" | jq -r '.entities[].metadata.uuid')
-
-          if [ -z "$project_uuid" ]; then
-              # project wasn't found
-              # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
-              echo "\nProject $CALM_PROJECT was not found. Please check the name and retry."
-              exit 0
-          else
-              echo "\nProject $CALM_PROJECT exists..."
-          fi
-      fi
-  else
-      echo '\nNo JSON files found in' + $DIRECTORY +' ... nothing to import!'
-  fi
-
-  # update the user with script progress...
-  _num_of_files=${#LIST_OF_BLUEPRINTS[@]}
-  echo "\nNumber of .json files found: ${_num_of_files}"
-  echo "\nStarting blueprint updates and then exporting to Calm one file at a time...\n\n"
-
-  # go through the blueprint JSON files list found in the specified directory
-  for elem in "${LIST_OF_BLUEPRINTS[@]}"; do
-      # read the entire JSON file from the directory
-      JSONFile=${DIRECTORY}/"$elem"
-
-      echo "\nCurrently updating blueprint $JSONFile..."
-
-      # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
-      tmp=$(mktemp)
-
-      # ADD PROJECT (affects all BPs being imported) if no project was specified on the command line, we've already pre-set the project variable to 'none' if a project was specified, we need to add it into the JSON data
-      if [ $CALM_PROJECT != 'none' ]; then
-          # add the new atributes to the JSON and overwrite the old JSON file with the new one
-          $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
-      fi
-
-      # ADD VARIABLES (affects ONLY if the current blueprint being imported MATCHES the name specified earlier "EraServerDeployment.json")
-      if [ "$elem" == "${NAME}" ]; then
-          if [ "$ERA_IP" != "none" ]; then
-              tmp_ERA_IP=$(mktemp)
-              # add the new variable to the json file and save it
-              $(jq --arg var_name $ERA_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="ERA_IP")).value=$var_name' $JSONFile >"$tmp_ERA_IP" && mv "$tmp_ERA_IP" $JSONFile)
-              # result="$(jq --arg newOBJ "${obj_with_replaced_variable}" '.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_VIP") | .+=$newOBJ' $JSONFile )"
-          fi
-          if [ "$PE_IP" != "none" ]; then
-              tmp_PE_IP=$(mktemp)
-              # add the new variable to the json file and save it
-              $(jq --arg var_name $PE_IP '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_VIP")).value=$var_name' $JSONFile >"$tmp_PE_IP" && mv "$tmp_PE_IP" $JSONFile)
-              # result="$(jq --arg newOBJ "${obj_with_replaced_variable}" '.spec.resources.service_definition_list[0].variable_list[] | select (.name=="PE_VIP") | .+=$newOBJ' $JSONFile )"
-          fi
-          if [ "$CLSTR_NAME" != "none" ]; then
-              tmp_CLSTR_NAME=$(mktemp)
-              $(jq --arg var_name $CLSTR_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CLSTR_NAME")).value=$var_name' $JSONFile >"$tmp_CLSTR_NAME" && mv "$tmp_CLSTR_NAME" $JSONFile)
-          fi
-          if [ "$CTR_UUID" != "none" ]; then
-              tmp_CTR_UUID=$(mktemp)
-              $(jq --arg var_name $CTR_UUID '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CTR_UUID")).value=$var_name' $JSONFile >"$tmp_CTR_UUID" && mv "$tmp_CTR_UUID" $JSONFile)
-          fi
-          if [ "$CTR_NAME" != "none" ]; then
-              tmp_CTR_NAME=$(mktemp)
-              $(jq --arg var_name $CTR_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="CTR_NAME")).value=$var_name' $JSONFile >"$tmp_CTR_NAME" && mv "$tmp_CTR_NAME" $JSONFile)
-          fi
-          if [ "$NETWORK_NAME" != "none" ]; then
-              tmp_NETWORK_NAME=$(mktemp)
-              $(jq --arg var_name $NETWORK_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="NETWORK_NAME")).value=$var_name' $JSONFile >"$tmp_NETWORK_NAME" && mv "$tmp_NETWORK_NAME" $JSONFile)
-          fi
-          if [ "$VLAN_NAME" != "none" ]; then
-              tmp_VLAN_NAME=$(mktemp)
-              $(jq --arg var_name $VLAN_NAME '(.spec.resources.service_definition_list[0].variable_list[] | select (.name=="VLAN_NAME")).value=$var_name' $JSONFile >"$tmp_VLAN_NAME" && mv "$tmp_VLAN_NAME" $JSONFile)
-          fi
-      fi
-
-      # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
-      tmp_removal=$(mktemp)
-      $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
-
-      # GET BP NAME (affects all BPs being imported)
-      # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
-      blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
-      blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
-      blueprint_name="${blueprint_name#\"}" # will remove the prefix "
-
-      if [ blueprint_name == 'null' ]; then
-          echo "\nUnprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?\n"
-          exit 0
-      else
-          # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
-          echo "\nUploading the updated blueprint: $blueprint_name...\n"
-
-          # Example curl call from the console:
-          # url="https://10.42.7.39:9440/api/nutanix/v3/blueprints/import_file"
-          # path_to_file="/Users/sharon.santana/Desktop/saved_blueprints/EraServerDeployment.json"
-          # bp_name="EraServerDeployment"
-          # project_uuid="a944258a-fd8a-4d02-8646-72c311e03747"
-          # password='techX2019!'
-          # curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password"
-
-          url="https://localhost:9440/api/nutanix/v3/blueprints/import_file"
-          path_to_file=$JSONFile
-          bp_name=$blueprint_name
-          project_uuid=$project_uuid
-          password=$PE_PASSWORD
-          upload_result=$(curl -s -k -X POST $url -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid --user admin:"$password")
-
-          #if the upload_result var is not empty then let's say it was succcessful
-          if [ -z "$upload_result" ]; then
-              echo "\nUpload for $bp_name did not finish."
-          else
-              echo "\nUpload for $bp_name finished."
-              echo "-----------------------------------------"
-              # echo "Result: $upload_result"
-          fi
-      fi
-
-    done
-
-    echo "\nFinished uploading Era Blueprint and setting Variables!\n"
-
-}
 
 ###############################################################################################################################################################################
 # Routine to make changes to the PC UI; Colors, naming and the Welcome Banner
@@ -1255,34 +884,934 @@ EOF
 ###############################################################################################################################################################################
 
 function pc_project() {
-  local  _name
+  local _name="BootcampInfra"
   local _count
-  local  _uuid
+  local _user_group_uuid
+  local _role="Project Admin"
+  local _role_uuid
+  local _pc_account_uuid
+  local _nw_name="${NW1_NAME}"
+  local _nw_uuid
+  local CURL_HTTP_OPTS=" --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure "
 
-   _name=${EMAIL%%@nutanix.com}.test
-  _count=$(. /etc/profile.d/nutanix_env.sh \
-    && nuclei project.list 2>/dev/null | grep ${_name} | wc --lines)
-  if (( ${_count} > 0 )); then
-    nuclei project.delete ${_name} confirm=false 2>/dev/null
+# Creating User Group
+log "Creating User Group"
+
+HTTP_JSON_BODY=$(cat <<EOF
+{
+  "api_version": "3.1.0",
+  "metadata": {
+    "kind": "user_group"
+    },
+  "spec": {
+    "resources": {
+      "directory_service_user_group": {
+        "distinguished_name": "cn=ssp admins,cn=users,dc=ntnxlab,dc=local"
+      }
+    }
+  }
+}
+EOF
+)
+
+  echo "Creating User Group Now"
+  echo $HTTP_JSON_BODY
+
+  _task_id=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST  --data "${HTTP_JSON_BODY}" 'https://localhost:9440/api/nutanix/v3/user_groups' | jq -r '.status.execution_context.task_uuid' | tr -d \")
+
+  log "Task uuid for the User Group Create is $_task_id  ....."
+
+  if [ -z "$_task_id" ]; then
+       log "User Group Create has encountered an error..."
   else
-    log "Warning: _count=${_count}"
+       log "User Group Create started.."
+       set _loops=0 # Reset the loop counter so we restart the amount of loops we need to run
+       # Run the progess checker
+       loop
   fi
 
-  log "Creating ${_name}..."
-  nuclei project.create name=${_name} description='test from NuCLeI!' 2>/dev/null
-  _uuid=$(. /etc/profile.d/nutanix_env.sh \
-    && nuclei project.get ${_name} format=json 2>/dev/null \
-    | jq .metadata.project_reference.uuid | tr -d '"')
-  log "${_name}.uuid = ${_uuid}"
+# Get the User Group UUID
+log "Get User Group UUID"
 
-    # - project.get mark.lavi.test
-    # - project.update mark.lavi.test
-    #     spec.resources.account_reference_list.kind= or .uuid
-    #     spec.resources.default_subnet_reference.kind=
-    #     spec.resources.environment_reference_list.kind=
-    #     spec.resources.external_user_group_reference_list.kind=
-    #     spec.resources.subnet_reference_list.kind=
-    #     spec.resources.user_reference_list.kind=
+_user_group_uuid=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/user_groups/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
 
-    # {"spec":{"access_control_policy_list":[],"project_detail":{"name":"mark.lavi.test1","resources":{"external_user_group_reference_list":[],"user_reference_list":[],"environment_reference_list":[],"account_reference_list":[],"subnet_reference_list":[{"kind":"subnet","name":"Primary","uuid":"a4000fcd-df41-42d7-9ffe-f1ab964b2796"},{"kind":"subnet","name":"Secondary","uuid":"4689bc7f-61dd-4527-bc7a-9d737ae61322"}],"default_subnet_reference":{"kind":"subnet","uuid":"a4000fcd-df41-42d7-9ffe-f1ab964b2796"}},"description":"test from NuCLeI!"},"user_list":[],"user_group_list":[]},"api_version":"3.1","metadata":{"creation_time":"2018-06-22T03:54:59Z","spec_version":0,"kind":"project","last_update_time":"2018-06-22T03:55:00Z","uuid":"1be7f66a-5006-4061-b9d2-76caefedd298","categories":{},"owner_reference":{"kind":"user","name":"admin","uuid":"00000000-0000-0000-0000-000000000000"}}}
+# Get the Network UUIDs
+log "Get cluster network UUID"
+
+_nw_uuid=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/subnets/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"subnet","filter": "name==Primary"}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+# Get the Role UUIDs
+log "Get Role UUID"
+
+_role_uuid=$(curl ${CURL_HTTP_OPTS}--request POST 'https://localhost:9440/api/nutanix/v3/roles/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"role","filter":"name==Project Admin"}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+# Get the PC Account UUIDs
+log "Get PC Account  UUID"
+
+_pc_account_uuid=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/accounts/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"account","filter":"type==nutanix_pc"}' | jq -r '.entities[] | .status.resources.data.cluster_account_reference_list[0].resources.data.pc_account_uuid' | tr -d \")
+
+log "Create BootcampInfra Project ..."
+log "User Group UUID = ${_user_group_uuid}"
+log "NW UUID = ${_nw_uuid}"
+log "Role UUID = ${_role_uuid}"
+log "PC Account UUID = ${_pc_account_uuid}"
+
+
+HTTP_JSON_BODY=$(cat <<EOF
+{
+  "api_version": "3.1",
+  "metadata": {
+	"kind": "project"
+  },
+  "spec": {
+  	"access_control_policy_list": [
+  	{
+  		"operation": "ADD",
+  		"metadata": {
+			"kind": "access_control_policy"
+		},
+  		"acp": {
+  			"name": "${_name}",
+  			"resources": {
+  				"role_reference": {
+  					"kind": "role",
+					  "name": "Project Admin",
+					  "uuid": "${_role_uuid}"
+  				},
+  				"user_group_reference_list": [
+        		{
+        			"kind": "user_group",
+        			"name": "CN=SSP Admins,CN=Users,DC=ntnxlab,DC=local",
+        			"uuid": "${_user_group_uuid}"
+        		}
+    			]
+  			}
+  		}
+  	}
+  	],
+	"project_detail": {
+  	"name": "${_name}",
+  	"resources": {
+    	"account_reference_list": [
+      	{
+        	"kind": "account",
+			    "name": "nutanix_pc",
+			    "uuid": "${_pc_account_uuid}"
+      	}
+    	],
+    	"subnet_reference_list": [
+      	{
+        	"kind": "subnet",
+        	"name": "Primary",
+        	"uuid": "${_nw_uuid}"
+      	}
+    	],
+    	"external_user_group_reference_list": [
+        {
+          "kind": "user_group",
+          "name": "CN=SSP Admins,CN=Users,DC=ntnxlab,DC=local",
+          "uuid": "${_user_group_uuid}"
+        }
+    	]
+  	}
+	},
+	"user_list": [],
+	"user_group_list": []
+  }
+}
+EOF
+)
+
+  echo "Creating Calm Project Create Now"
+  echo $HTTP_JSON_BODY
+
+  _task_id=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST  --data "${HTTP_JSON_BODY}" 'https://localhost:9440/api/nutanix/v3/projects_internal' | jq -r '.status.execution_context.task_uuid' | tr -d \")
+
+  log "Task uuid for the Calm Project Create is " $_task_id " ....."
+  #Sleep 60
+
+  #_task_id=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/projects_internal' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data "${_http_body}" | jq -r '.status.execution_context.task_uuid' | tr -d \")
+
+  if [ -z "$_task_id" ]; then
+       log "Calm Project Create has encountered an error..."
+  else
+       log "Calm Project Create started.."
+       set _loops=0 # Reset the loop counter so we restart the amount of loops we need to run
+       # Run the progess checker
+       loop
+  fi
+
+  log "_ssp_connect=|${_ssp_connect}|"
+
+}
+
+###############################################################################################################################################################################
+# Routine to upload Citrix Calm Blueprint and set variables
+###############################################################################################################################################################################
+
+function upload_citrix_calm_blueprint() {
+  local DIRECTORY="/home/nutanix/citrix"
+  local BLUEPRINT=${Citrix_Blueprint}
+  local CALM_PROJECT="BootcampInfra"
+  local DOMAIN=${AUTH_FQDN}
+  local AD_IP=${AUTH_HOST}
+  local PE_IP=${PE_HOST}
+  local DDC_IP=${CITRIX_DDC_HOST}
+  local NutanixAcropolisPlugin="none"
+  local CVM_NETWORK=${NW1_NAME}
+  local NETWORK_NAME=${NW1_NAME}
+  local VLAN_NAME=${NW1_VLAN}
+  local BPG_RKTOOLS_URL="none"
+  local NutanixAcropolis_Installed_Path="none"
+  local LOCAL_PASSWORD="nutanix/4u"
+  local DOMAIN_CREDS_PASSWORD="nutanix/4u"
+  local PE_CREDS_PASSWORD="${PE_PASSWORD}"
+  local SQL_CREDS_PASSWORD="nutanix/4u"
+  local DOWNLOAD_BLUEPRINTS
+  local NETWORK_UUID
+  local SERVER_IMAGE="Windows2016.qcow2"
+  local SERVER_IMAGE_UUID
+  local CITRIX_IMAGE="Citrix_Virtual_Apps_and_Desktops_7_1912.iso"
+  local CITRIX_IMAGE_UUID
+  local CURL_HTTP_OPTS="--max-time 25 --silent -k --header Content-Type:application/json --header Accept:application/json  --insecure"
+  local _loops="0"
+  local _maxtries="75"
+
+
+  echo "Starting Citrix Blueprint Deployment"
+
+  mkdir $DIRECTORY
+
+  echo "Getting Server Image UUID"
+  #Getting the IMAGE_UUID
+  _loops="0"
+  _maxtries="75"
+
+  SERVER_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d '{}' 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'Windows2016.qcow2' | wc -l)
+  # The response should be a Task UUID
+  while [[ $SERVER_IMAGE_UUID_CHECK -ne 1 && $_loops -lt $_maxtries ]]; do
+      log "Image not yet uploaded. $_loops/$_maxtries... sleeping 60 seconds"
+      sleep 60
+      SERVER_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d '{}' 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'Windows2016.qcow2' | wc -l)
+      (( _loops++ ))
+  done
+  if [[ $_loops -lt $_maxtries ]]; then
+      log "Image has been uploaded."
+      SERVER_IMAGE_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"image","filter": "name==Windows2016.qcow2"}' 'https://localhost:9440/api/nutanix/v3/images/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+  else
+      log "Image is not upload, please check."
+  fi
+
+  echo "Server Image UUID = $SERVER_IMAGE_UUID"
+  echo "-----------------------------------------"
+
+  sleep 30
+
+  echo "Getting Citrix Image UUID"
+  #Getting the IMAGE_UUID
+  _loops="0"
+  _maxtries="75"
+
+  CITRIX_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d '{}' 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'Citrix_Virtual_Apps_and_Desktops_7_1912.iso' | wc -l)
+  while [[ $CITRIX_IMAGE_UUID_CHECK -ne 1 && $_loops -lt $_maxtries ]]; do
+      log "Image not yet uploaded. $_loops/$_maxtries... sleeping 60 seconds"
+      sleep 60
+      CITRIX_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d '{}' 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'Citrix_Virtual_Apps_and_Desktops_7_1912.iso' | wc -l)
+      (( _loops++ ))
+  done
+  if [[ $_loops -lt $_maxtries ]]; then
+      log "Image has been uploaded."
+      CITRIX_IMAGE_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"image","filter": "name==Citrix_Virtual_Apps_and_Desktops_7_1912.iso"}' 'https://localhost:9440/api/nutanix/v3/images/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+  else
+      log "Image is not upload, please check."
+  fi
+
+  echo "Citrix Image UUID = $CITRIX_IMAGE_UUID"
+  echo "-----------------------------------------"
+
+  sleep 30
+
+  echo "Getting Network UUID"
+
+  NETWORK_UUID=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/subnets/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"subnet","filter": "name==Primary"}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  echo "NETWORK UUID = $NETWORK_UUID"
+  echo "-----------------------------------------"
+
+  # download the blueprint
+  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${BLUEPRINT} -o ${DIRECTORY}/${BLUEPRINT})
+  log "Downloading ${BLUEPRINT} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
+
+  # ensure the directory that contains the blueprints to be imported is not empty
+  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
+      echo "There are no .json files found in the directory provided."
+      exit 0
+  fi
+
+  if [ $CALM_PROJECT != 'none' ]; then
+
+      # curl command needed:
+      # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
+
+      # make API call and store project_uuid
+      project_uuid=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"project", "filter":"name==BootcampInfra"}' 'https://localhost:9440/api/nutanix/v3/projects/list' | jq -r '.entities[].metadata.uuid')
+
+      echo "Projet UUID = $project_uuid"
+
+      if [ -z "$project_uuid" ]; then
+          # project wasn't found
+          # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
+          echo "Project $CALM_PROJECT was not found. Please check the name and retry."
+          exit 0
+      else
+          echo "Project $CALM_PROJECT exists..."
+      fi
+  fi
+
+
+  # update the user with script progress...
+
+  echo "Starting blueprint updates and then Uploading to Calm..."
+
+  JSONFile="${DIRECTORY}/${BLUEPRINT}"
+
+  echo "Currently updating blueprint $JSONFile..."
+
+
+  # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
+  tmp=$(mktemp)
+
+  # ADD PROJECT (affects all BPs being imported) if no project was specified on the command line, we've already pre-set the project variable to 'none' if a project was specified, we need to add it into the JSON data
+  if [ $CALM_PROJECT != 'none' ]; then
+      # add the new atributes to the JSON and overwrite the old JSON file with the new one
+      $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
+  fi
+
+  # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
+  tmp_removal=$(mktemp)
+  $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
+
+  # GET BP NAME (affects all BPs being imported)
+  # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
+  blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
+  blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
+  blueprint_name="${blueprint_name#\"}" # will remove the prefix "
+
+  if [ $blueprint_name == 'null' ]; then
+      echo "Unprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?"
+      exit 0
+  else
+      # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
+      echo "Uploading the updated blueprint: $blueprint_name..."
+
+      path_to_file=$JSONFile
+      bp_name=$blueprint_name
+      project_uuid=$project_uuid
+
+      upload_result=$(curl -s -k --insecure --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid "https://localhost:9440/api/nutanix/v3/blueprints/import_file")
+
+      #if the upload_result var is not empty then let's say it was succcessful
+      if [ -z "$upload_result" ]; then
+          echo "Upload for $bp_name did not finish."
+      else
+          echo "Upload for $bp_name finished."
+          echo "-----------------------------------------"
+          # echo "Result: $upload_result"
+      fi
+  fi
+
+  echo "Finished uploading ${BLUEPRINT}!"
+
+  #Getting the Blueprint UUID
+  CITRIX_BLUEPRINT_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"blueprint","filter": "name==CitrixBootcampInfra"}' 'https://localhost:9440/api/nutanix/v3/blueprints/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  echo "Citrix Blueprint UUID = $CITRIX_BLUEPRINT_UUID"
+
+  echo "Update Blueprint and writing to temp file"
+  echo "${CALM_PROJECT} network UUID: ${project_uuid}"
+  echo "DOMAIN=${DOMAIN}"
+  echo "AD_IP=${AD_IP}"
+  echo "PE_IP=${PE_IP}"
+  echo "DDC_IP=${DDC_IP}"
+  echo "CVM_NETWORK=${CVM_NETWORK}"
+  echo "SERVER_IMAGE=${SERVER_IMAGE}"
+  echo "SERVER_IMAGE_UUID=${SERVER_IMAGE_UUID}"
+  echo "CITRIX_IMAGE=${CITRIX_IMAGE}"
+  echo "CITRIX_IMAGE_UUID=${CITRIX_IMAGE_UUID}"
+  echo "NETWORK_UUID=${NETWORK_UUID}"
+
+  DOWNLOADED_JSONFile="${BLUEPRINT}-${CITRIX_BLUEPRINT_UUID}.json"
+  UPDATED_JSONFile="${BLUEPRINT}-${CITRIX_BLUEPRINT_UUID}-updated.json"
+
+  # GET The Blueprint so it can be updated
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET -d '{}' "https://localhost:9440/api/nutanix/v3/blueprints/${CITRIX_BLUEPRINT_UUID}" > ${DOWNLOADED_JSONFile}
+
+  cat $DOWNLOADED_JSONFile \
+  | jq -c 'del(.status)' \
+  | jq -c -r "(.spec.resources.app_profile_list[0].variable_list[0].value = \"$DOMAIN\")" \
+  | jq -c -r "(.spec.resources.app_profile_list[0].variable_list[1].value = \"$AD_IP\")" \
+  | jq -c -r "(.spec.resources.app_profile_list[0].variable_list[2].value = \"$PE_IP\")" \
+  | jq -c -r "(.spec.resources.app_profile_list[0].variable_list[6].value = \"$DDC_IP\")" \
+  | jq -c -r "(.spec.resources.app_profile_list[0].variable_list[4].value = \"$CVM_NETWORK\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.name = \"$SERVER_IMAGE\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.uuid = \"$SERVER_IMAGE_UUID\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[1].data_source_reference.name = \"$CITRIX_IMAGE\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[1].data_source_reference.uuid = \"$CITRIX_IMAGE_UUID\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[].create_spec.resources.nic_list[].subnet_reference.uuid = \"$NETWORK_UUID\")" \
+  | jq -c -r "(.spec.resources.credential_definition_list[0].secret.value = \"$LOCAL_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[0].secret.attrs.is_secret_modified = "true")' \
+  | jq -c -r "(.spec.resources.credential_definition_list[1].secret.value = \"$DOMAIN_CREDS_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[1].secret.attrs.is_secret_modified = "true")' \
+  | jq -c -r "(.spec.resources.credential_definition_list[2].secret.value = \"$PE_CREDS_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[2].secret.attrs.is_secret_modified = "true")' \
+  | jq -c -r "(.spec.resources.credential_definition_list[3].secret.value = \"$SQL_CREDS_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[3].secret.attrs.is_secret_modified = "true")' \
+  > $UPDATED_JSONFile
+
+  echo "Saving Credentials Edits with PUT"
+
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X PUT -d @$UPDATED_JSONFile "https://localhost:9440/api/nutanix/v3/blueprints/${CITRIX_BLUEPRINT_UUID}"
+
+  echo "Finished Updating Credentials"
+
+  # GET The Blueprint payload
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET -d '{}' "https://localhost:9440/api/nutanix/v3/blueprints/${CITRIX_BLUEPRINT_UUID}" | jq 'del(.status, .spec.name) | .spec += {"application_name": "Citrix Infra", "app_profile_reference": {"uuid": .spec.resources.app_profile_list[0].uuid, "kind": "app_profile" }}' > set_blueprint_response_file.json
+
+  # Launch the BLUEPRINT
+
+  echo "Launching the Era Server Application"
+
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d @set_blueprint_response_file.json "https://localhost:9440/api/nutanix/v3/blueprints/${CITRIX_BLUEPRINT_UUID}/launch"
+
+  echo "Finished Launching the Citrix Infra Application"
+
+}
+
+###############################################################################################################################################################################
+# Routine to upload Era Calm Blueprint and set variables
+###############################################################################################################################################################################
+
+function upload_era_calm_blueprint() {
+  local DIRECTORY="/home/nutanix/era"
+  local BLUEPRINT=${ERA_Blueprint}
+  local CALM_PROJECT="BootcampInfra"
+  local ERA_IP=${ERA_HOST}
+  local PE_IP=${PE_HOST}
+  local CLSTR_NAME="none"
+  local CTR_UUID=${_storage_default_uuid}
+  local CTR_NAME=${STORAGE_DEFAULT}
+  local NETWORK_NAME=${NW1_NAME}
+  local VLAN_NAME=${NW1_VLAN}
+  local ERAADMIN_PASSWORD="nutanix/4u"
+  local PE_CREDS_PASSWORD="${PE_PASSWORD}"
+  #local ERACLI_PASSWORD=$(awk '{printf "%s\\n", $0}' ${DIRECTORY}/${CALM_RSA_KEY_FILE})
+  local DOWNLOAD_BLUEPRINTS
+  local ERA_IMAGE="ERA-Server-build-1.2.0.1.qcow2"
+  local ERA_IMAGE_UUID
+  local CURL_HTTP_OPTS="--max-time 25 --silent -k --header Content-Type:application/json --header Accept:application/json  --insecure"
+  local _loops="0"
+  local _maxtries="75"
+
+
+  echo "Starting Era Blueprint Deployment"
+
+  mkdir $DIRECTORY
+
+  echo "Getting Era Image UUID"
+  #Getting the IMAGE_UUID -- WHen changing the image make sure to change in the name filter
+  _loops="0"
+  _maxtries="75"
+
+  ERA_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d '{}' 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'ERA-Server-build-1.2.0.1.qcow2' | wc -l)
+  # The response should be a Task UUID
+  while [[ $ERA_IMAGE_UUID_CHECK -ne 1 && $_loops -lt $_maxtries ]]; do
+      log "Image not yet uploaded. $_loops/$_maxtries... sleeping 60 seconds"
+      sleep 60
+      ERA_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d '{}' 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'ERA-Server-build-1.2.0.1.qcow2' | wc -l)
+      (( _loops++ ))
+  done
+  if [[ $_loops -lt $_maxtries ]]; then
+      log "Image has been uploaded."
+      ERA_IMAGE_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"image","filter": "name==ERA-Server-build-1.2.0.1.qcow2"}' 'https://localhost:9440/api/nutanix/v3/images/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+  else
+      log "Image is not upload, please check."
+  fi
+
+
+  echo "ERA Image UUID = $ERA_IMAGE_UUID"
+  echo "-----------------------------------------"
+
+  echo "Getting NETWORK UUID"
+
+  NETWORK_UUID=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/subnets/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"subnet","filter": "name==Primary"}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  echo "NETWORK UUID = $NETWORK_UUID"
+  echo "-----------------------------------------"
+
+  # download the blueprint
+  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${BLUEPRINT} -o ${DIRECTORY}/${BLUEPRINT})
+  log "Downloading ${BLUEPRINT} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
+
+  # ensure the directory that contains the blueprints to be imported is not empty
+  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
+      echo "There are no .json files found in the directory provided."
+      exit 0
+  fi
+
+  if [ $CALM_PROJECT != 'none' ]; then
+
+      # curl command needed:
+      # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
+
+      # make API call and store project_uuid
+      project_uuid=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"project", "filter":"name==BootcampInfra"}' 'https://localhost:9440/api/nutanix/v3/projects/list' | jq -r '.entities[].metadata.uuid')
+
+      echo "Projet UUID = $project_uuid"
+
+      if [ -z "$project_uuid" ]; then
+          # project wasn't found
+          # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
+          echo "Project $CALM_PROJECT was not found. Please check the name and retry."
+          exit 0
+      else
+          echo "Project $CALM_PROJECT exists..."
+      fi
+  fi
+
+  # update the user with script progress...
+
+  echo "Starting blueprint updates and then Uploading to Calm..."
+
+  # read the entire JSON file from the directory
+  JSONFile="${DIRECTORY}/${BLUEPRINT}"
+
+  echo "Currently updating blueprint $JSONFile..."
+
+  # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
+  tmp=$(mktemp)
+
+  # ADD PROJECT , we need to add it into the JSON data
+  if [ $CALM_PROJECT != 'none' ]; then
+      # add the new atributes to the JSON and overwrite the old JSON file with the new one
+      $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
+  fi
+
+  # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
+  tmp_removal=$(mktemp)
+  $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
+
+  # GET BP NAME (affects all BPs being imported)
+  # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
+  blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
+  blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
+  blueprint_name="${blueprint_name#\"}" # will remove the prefix "
+
+  if [ $blueprint_name == 'null' ]; then
+      echo "Unprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?"
+      exit 0
+  else
+      # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
+      echo "Uploading the updated blueprint: $blueprint_name..."
+
+      path_to_file=$JSONFile
+      bp_name=$blueprint_name
+      project_uuid=$project_uuid
+
+      upload_result=$(curl -s -k --insecure --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST https://localhost:9440/api/nutanix/v3/blueprints/import_file -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid)
+
+      #if the upload_result var is not empty then let's say it was succcessful
+      if [ -z "$upload_result" ]; then
+          echo "Upload for $bp_name did not finish."
+      else
+          echo "Upload for $bp_name finished."
+          echo "-----------------------------------------"
+          # echo "Result: $upload_result"
+      fi
+  fi
+
+  echo "Finished uploading ${BLUEPRINT}!"
+
+  #Getting the Blueprint UUID
+  ERA_BLUEPRINT_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"blueprint","filter": "name==EraServerDeployment"}' 'https://localhost:9440/api/nutanix/v3/blueprints/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  echo "ERA Blueprint UUID = $ERA_BLUEPRINT_UUID"
+
+  echo "Update Blueprint and writing to temp file"
+
+  echo "${CALM_PROJECT} network UUID: ${project_uuid}"
+  echo "ERA_IP=${ERA_IP}"
+  echo "PE_IP=${PE_IP}"
+  echo "ERA_IMAGE=${ERA_IMAGE}"
+  echo "ERA_IMAGE_UUID=${ERA_IMAGE_UUID}"
+  echo "NETWORK_UUID=${NETWORK_UUID}"
+
+  DOWNLOADED_JSONFile="${BLUEPRINT}-${ERA_BLUEPRINT_UUID}.json"
+  UPDATED_JSONFile="${BLUEPRINT}-${ERA_BLUEPRINT_UUID}-updated.json"
+
+  # GET The Blueprint so it can be updated
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET -d '{}' "https://localhost:9440/api/nutanix/v3/blueprints/${ERA_BLUEPRINT_UUID}" > ${DOWNLOADED_JSONFile}
+
+  cat $DOWNLOADED_JSONFile \
+  | jq -c 'del(.status)' \
+  | jq -c -r "(.spec.resources.app_profile_list[0].variable_list[0].value = \"$ERA_IP\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.name = \"$ERA_IMAGE\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.uuid = \"$ERA_IMAGE_UUID\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[].create_spec.resources.nic_list[].subnet_reference.uuid = \"$NETWORK_UUID\")" \
+  | jq -c -r "(.spec.resources.credential_definition_list[0].secret.value = \"$ERAADMIN_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[0].secret.attrs.is_secret_modified = "true")' \
+  | jq -c -r "(.spec.resources.credential_definition_list[1].secret.value = \"$PE_CREDS_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[1].secret.attrs.is_secret_modified = "true")' \
+  | jq -c -r "(.spec.resources.credential_definition_list[2].secret.value=\"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAii7qFDhVadLx5lULAG/ooCUTA/ATSmXbArs+GdHxbUWd/bNG\nZCXnaQ2L1mSVVGDxfTbSaTJ3En3tVlMtD2RjZPdhqWESCaoj2kXLYSiNDS9qz3SK\n6h822je/f9O9CzCTrw2XGhnDVwmNraUvO5wmQObCDthTXc72PcBOd6oa4ENsnuY9\nHtiETg29TZXgCYPFXipLBHSZYkBmGgccAeY9dq5ywiywBJLuoSovXkkRJk3cd7Gy\nhCRIwYzqfdgSmiAMYgJLrz/UuLxatPqXts2D8v1xqR9EPNZNzgd4QHK4of1lqsNR\nuz2SxkwqLcXSw0mGcAL8mIwVpzhPzwmENC5OrwIBJQKCAQB++q2WCkCmbtByyrAp\n6ktiukjTL6MGGGhjX/PgYA5IvINX1SvtU0NZnb7FAntiSz7GFrODQyFPQ0jL3bq0\nMrwzRDA6x+cPzMb/7RvBEIGdadfFjbAVaMqfAsul5SpBokKFLxU6lDb2CMdhS67c\n1K2Hv0qKLpHL0vAdEZQ2nFAMWETvVMzl0o1dQmyGzA0GTY8VYdCRsUbwNgvFMvBj\n8T/svzjpASDifa7IXlGaLrXfCH584zt7y+qjJ05O1G0NFslQ9n2wi7F93N8rHxgl\nJDE4OhfyaDyLL1UdBlBpjYPSUbX7D5NExLggWEVFEwx4JRaK6+aDdFDKbSBIidHf\nh45NAoGBANjANRKLBtcxmW4foK5ILTuFkOaowqj+2AIgT1ezCVpErHDFg0bkuvDk\nQVdsAJRX5//luSO30dI0OWWGjgmIUXD7iej0sjAPJjRAv8ai+MYyaLfkdqv1Oj5c\noDC3KjmSdXTuWSYNvarsW+Uf2v7zlZlWesTnpV6gkZH3tX86iuiZAoGBAKM0mKX0\nEjFkJH65Ym7gIED2CUyuFqq4WsCUD2RakpYZyIBKZGr8MRni3I4z6Hqm+rxVW6Dj\nuFGQe5GhgPvO23UG1Y6nm0VkYgZq81TraZc/oMzignSC95w7OsLaLn6qp32Fje1M\nEz2Yn0T3dDcu1twY8OoDuvWx5LFMJ3NoRJaHAoGBAJ4rZP+xj17DVElxBo0EPK7k\n7TKygDYhwDjnJSRSN0HfFg0agmQqXucjGuzEbyAkeN1Um9vLU+xrTHqEyIN/Jqxk\nhztKxzfTtBhK7M84p7M5iq+0jfMau8ykdOVHZAB/odHeXLrnbrr/gVQsAKw1NdDC\nkPCNXP/c9JrzB+c4juEVAoGBAJGPxmp/vTL4c5OebIxnCAKWP6VBUnyWliFhdYME\nrECvNkjoZ2ZWjKhijVw8Il+OAjlFNgwJXzP9Z0qJIAMuHa2QeUfhmFKlo4ku9LOF\n2rdUbNJpKD5m+IRsLX1az4W6zLwPVRHp56WjzFJEfGiRjzMBfOxkMSBSjbLjDm3Z\niUf7AoGBALjvtjapDwlEa5/CFvzOVGFq4L/OJTBEBGx/SA4HUc3TFTtlY2hvTDPZ\ndQr/JBzLBUjCOBVuUuH3uW7hGhW+DnlzrfbfJATaRR8Ht6VU651T+Gbrr8EqNpCP\ngmznERCNf9Kaxl/hlyV5dZBe/2LIK+/jLGNu9EJLoraaCBFshJKF\n-----END RSA PRIVATE KEY-----\n\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[2].secret.attrs.is_secret_modified = "true")' \
+  > $UPDATED_JSONFile
+
+  echo "Saving Credentials Edits with PUT"
+
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X PUT -d @$UPDATED_JSONFile "https://localhost:9440/api/nutanix/v3/blueprints/${ERA_BLUEPRINT_UUID}"
+
+  echo "Finished Updating Credentials"
+
+  # GET The Blueprint payload
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET -d '{}' "https://localhost:9440/api/nutanix/v3/blueprints/${ERA_BLUEPRINT_UUID}" | jq 'del(.status, .spec.name) | .spec += {"application_name": "Era Server", "app_profile_reference": {"uuid": .spec.resources.app_profile_list[0].uuid, "kind": "app_profile" }}' > set_blueprint_response_file.json
+
+  # Launch the BLUEPRINT
+
+  echo "Launching the Era Server Application"
+
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d @set_blueprint_response_file.json "https://localhost:9440/api/nutanix/v3/blueprints/${ERA_BLUEPRINT_UUID}/launch"
+
+  echo "Finished Launching the Era Server Application"
+
+}
+
+###############################################################################################################################################################################
+# Routine to upload Karbon Calm Blueprint and set variables
+###############################################################################################################################################################################
+
+function upload_karbon_calm_blueprint() {
+  local DIRECTORY="/home/nutanix/karbon"
+  local BLUEPRINT=${Karbon_Blueprint}
+  local CALM_PROJECT="BootcampInfra"
+  local KARBON_IMAGE='ntnx-0.2'
+  local PE_IP=${PE_HOST}
+  local CLSTR_NAME="none"
+  local CTR_UUID=${_storage_default_uuid}
+  local CTR_NAME=${STORAGE_DEFAULT}
+  local NETWORK_NAME=${NW1_NAME}
+  local VLAN_NAME=${NW1_VLAN}
+  local PE_CREDS_PASSWORD="${PE_PASSWORD}"
+  local PC_CREDS_PASSWORD="${PE_PASSWORD}"
+  #local ERACLI_PASSWORD=$(awk '{printf "%s\\n", $0}' ${DIRECTORY}/${CALM_RSA_KEY_FILE})
+  local DOWNLOAD_BLUEPRINTS
+  local CURL_HTTP_OPTS="--max-time 25 --silent -k --header Content-Type:application/json --header Accept:application/json  --insecure"
+  local _loops="0"
+  local _maxtries="75"
+
+
+  echo "Starting Karbon Blueprint Deployment"
+
+  mkdir $DIRECTORY
+
+  # download the blueprint
+  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${BLUEPRINT} -o ${DIRECTORY}/${BLUEPRINT})
+  log "Downloading ${BLUEPRINT} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
+
+  # ensure the directory that contains the blueprints to be imported is not empty
+  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
+      echo "There are no .json files found in the directory provided."
+      exit 0
+  fi
+
+  if [ $CALM_PROJECT != 'none' ]; then
+
+      # curl command needed:
+      # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
+
+      # make API call and store project_uuid
+      project_uuid=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"project", "filter":"name==BootcampInfra"}' 'https://localhost:9440/api/nutanix/v3/projects/list' | jq -r '.entities[].metadata.uuid')
+
+      echo "Projet UUID = $project_uuid"
+
+      if [ -z "$project_uuid" ]; then
+          # project wasn't found
+          # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
+          echo "Project $CALM_PROJECT was not found. Please check the name and retry."
+          exit 0
+      else
+          echo "Project $CALM_PROJECT exists..."
+      fi
+  fi
+
+  # update the user with script progress...
+
+  echo "Starting blueprint updates and then Uploading to Calm..."
+
+  # read the entire JSON file from the directory
+  JSONFile="${DIRECTORY}/${BLUEPRINT}"
+
+  echo "Currently updating blueprint $JSONFile..."
+
+  # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
+  tmp=$(mktemp)
+
+  # ADD PROJECT , we need to add it into the JSON data
+  if [ $CALM_PROJECT != 'none' ]; then
+      # add the new atributes to the JSON and overwrite the old JSON file with the new one
+      $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
+  fi
+
+  # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
+  tmp_removal=$(mktemp)
+  $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
+
+  # GET BP NAME (affects all BPs being imported)
+  # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
+  blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
+  blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
+  blueprint_name="${blueprint_name#\"}" # will remove the prefix "
+
+  if [ $blueprint_name == 'null' ]; then
+      echo "Unprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?"
+      exit 0
+  else
+      # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
+      echo "Uploading the updated blueprint: $blueprint_name..."
+
+      path_to_file=$JSONFile
+      bp_name=$blueprint_name
+      project_uuid=$project_uuid
+
+      upload_result=$(curl -s -k --insecure --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST https://localhost:9440/api/nutanix/v3/blueprints/import_file -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid)
+
+      #if the upload_result var is not empty then let's say it was succcessful
+      if [ -z "$upload_result" ]; then
+          echo "Upload for $bp_name did not finish."
+      else
+          echo "Upload for $bp_name finished."
+          echo "-----------------------------------------"
+          # echo "Result: $upload_result"
+      fi
+  fi
+
+  echo "Finished uploading ${BLUEPRINT}!"
+
+  #Getting the Blueprint UUID
+  KARBON_BLUEPRINT_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"blueprint","filter": "name==KarbonClusterDeployment"}' 'https://localhost:9440/api/nutanix/v3/blueprints/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  echo "Karbon Blueprint UUID = $KARBON_BLUEPRINT_UUID"
+
+  echo "Update Blueprint and writing to temp file"
+
+  echo "${CALM_PROJECT} network UUID: ${project_uuid}"
+  echo "KARBON_BLUEPRINT_UUID=${KARBON_BLUEPRINT_UUID}"
+
+  DOWNLOADED_JSONFile="${BLUEPRINT}-${KARBON_BLUEPRINT_UUID}.json"
+  UPDATED_JSONFile="${BLUEPRINT}-${KARBON_BLUEPRINT_UUID}-updated.json"
+
+  # GET The Blueprint so it can be updated
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET -d '{}' "https://localhost:9440/api/nutanix/v3/blueprints/${KARBON_BLUEPRINT_UUID}" > ${DOWNLOADED_JSONFile}
+
+  cat $DOWNLOADED_JSONFile \
+  | jq -c 'del(.status)' \
+  | jq -c -r "(.spec.resources.credential_definition_list[0].secret.value = \"$PE_CREDS_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[0].secret.attrs.is_secret_modified = "true")' \
+  | jq -c -r "(.spec.resources.credential_definition_list[1].secret.value = \"$PC_CREDS_PASSWORD\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[1].secret.attrs.is_secret_modified = "true")' \
+  > $UPDATED_JSONFile
+
+  echo "Saving Credentials Edits with PUT"
+
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X PUT -d @$UPDATED_JSONFile "https://localhost:9440/api/nutanix/v3/blueprints/${KARBON_BLUEPRINT_UUID}"
+
+  echo "Finished Updating Credentials"
+
+  # GET The Blueprint payload
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET -d '{}' "https://localhost:9440/api/nutanix/v3/blueprints/${KARBON_BLUEPRINT_UUID}" | jq 'del(.status, .spec.name) | .spec += {"application_name": "KarbonClusterDeployment", "app_profile_reference": {"uuid": .spec.resources.app_profile_list[0].uuid, "kind": "app_profile" }}' > set_blueprint_response_file.json
+
+  # Launch the BLUEPRINT
+
+  #echo "Launching the Era Server Application"
+
+  #curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d @set_blueprint_response_file.json "https://localhost:9440/api/nutanix/v3/blueprints/${KARBON_BLUEPRINT_UUID}/launch"
+
+  #echo "Finished Launching the Karbon Cluster Deployment Blueprint"
+
+}
+
+###############################################################################################################################################################################
+# Routine to upload CICDInfra Calm Blueprint and set variables
+###############################################################################################################################################################################
+
+function upload_CICDInfra_calm_blueprint() {
+  local DIRECTORY="/home/nutanix/cicdinfra"
+  local BLUEPRINT=${CICDInfra_Blueprint}
+  local CALM_PROJECT="BootcampInfra"
+  local NETWORK_NAME=${NW1_NAME}
+  local VLAN_NAME=${NW1_VLAN}
+  #local CENTOS_PASSWORD=$(awk '{printf "%s\\n", $0}' ${DIRECTORY}/${CALM_RSA_KEY_FILE})
+  local DOWNLOAD_BLUEPRINTS
+  local NETWORK_UUID
+  local SERVER_IMAGE="CentOS7.qcow2"
+  local SERVER_IMAGE_UUID
+  local CURL_HTTP_OPTS="--max-time 25 --silent -k --header Content-Type:application/json --header Accept:application/json  --insecure"
+  local _loops="0"
+  local _maxtries="75"
+
+  echo "Starting CICDInfra Blueprint Deployment"
+
+  mkdir $DIRECTORY
+
+  echo "Getting Server Image UUID"
+  #Getting the IMAGE_UUID -- WHen changing the image make sure to change in the name filter
+  _loops="0"
+  _maxtries="75"
+
+  SERVER_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d {} 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'CentOS7.qcow2' | wc -l)
+  # The response should be a Task UUID
+  while [[ $SERVER_IMAGE_UUID_CHECK -ne 1 && $_loops -lt $_maxtries ]]; do
+      log "Image not yet uploaded. $_loops/$_maxtries... sleeping 60 seconds"
+      sleep 60
+      SERVER_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d {} 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'CentOS7.qcow2' | wc -l)
+      (( _loops++ ))
+  done
+  if [[ $_loops -lt $_maxtries ]]; then
+      log "Image has been uploaded."
+      SERVER_IMAGE_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"image","filter": "name==CentOS7.qcow2"}' 'https://localhost:9440/api/nutanix/v3/images/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+  else
+      log "Image is not upload, please check."
+  fi
+
+  echo "Server Image UUID = $SERVER_IMAGE_UUID"
+  echo "-----------------------------------------"
+
+  NETWORK_UUID=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/subnets/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"subnet","filter": "name==Primary"}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  echo "NETWORK UUID = $NETWORK_UUID"
+  echo "-----------------------------------------"
+
+  # download the blueprint
+  DOWNLOAD_BLUEPRINTS=$(curl -L ${BLUEPRINT_URL}${BLUEPRINT} -o ${DIRECTORY}/${BLUEPRINT})
+  log "Downloading ${BLUEPRINT} | BLUEPRINT_URL ${BLUEPRINT_URL}|${DOWNLOAD_BLUEPRINTS}"
+
+  # ensure the directory that contains the blueprints to be imported is not empty
+  if [[ $(ls -l "$DIRECTORY"/*.json) == *"No such file or directory"* ]]; then
+      echo "There are no .json files found in the directory provided."
+      exit 0
+  fi
+
+  if [ $CALM_PROJECT != 'none' ]; then
+
+      # curl command needed:
+      # curl -s -k -X POST https://10.42.7.39:9440/api/nutanix/v3/projects/list -H 'Content-Type: application/json' --user admin:techX2019! -d '{"kind": "project", "filter": "name==default"}' | jq -r '.entities[].metadata.uuid'
+
+      # make API call and store project_uuid
+      project_uuid=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"project", "filter":"name==BootcampInfra"}' 'https://localhost:9440/api/nutanix/v3/projects/list' | jq -r '.entities[].metadata.uuid')
+
+      echo "Projet UUID = $project_uuid"
+
+      if [ -z "$project_uuid" ]; then
+          # project wasn't found
+          # exit at this point as we don't want to assume all blueprints should then hit the 'default' project
+          echo "Project $CALM_PROJECT was not found. Please check the name and retry."
+          exit 0
+      else
+          echo "Project $CALM_PROJECT exists..."
+      fi
+  fi
+
+  # update the user with script progress...
+  echo "Starting blueprint updates and then Uploading to Calm..."
+
+  JSONFile="${DIRECTORY}/${BLUEPRINT}"
+
+  echo "Currently updating blueprint $JSONFile..."
+
+  # NOTE: bash doesn't do in place editing so we need to use a temp file and overwrite the old file with new changes for every blueprint
+  tmp=$(mktemp)
+
+  # ADD PROJECT , we need to add it into the JSON data
+  if [ $CALM_PROJECT != 'none' ]; then
+      # add the new atributes to the JSON and overwrite the old JSON file with the new one
+      $(jq --arg proj $CALM_PROJECT --arg proj_uuid $project_uuid '.metadata+={"project_reference":{"kind":$proj,"uuid":$proj_uuid}}' $JSONFile >"$tmp" && mv "$tmp" $JSONFile)
+  fi
+  # REMOVE the "status" and "product_version" keys (if they exist) from the JSON data this is included on export but is invalid on import. (affects all BPs being imported)
+  tmp_removal=$(mktemp)
+  $(jq 'del(.status) | del(.product_version)' $JSONFile >"$tmp_removal" && mv "$tmp_removal" $JSONFile)
+
+  # GET BP NAME (affects all BPs being imported)
+  # if this fails, it's either a corrupt/damaged/edited blueprint JSON file or not a blueprint file at all
+  blueprint_name_quotes=$(jq '(.spec.name)' $JSONFile)
+  blueprint_name="${blueprint_name_quotes%\"}" # remove the suffix "
+  blueprint_name="${blueprint_name#\"}" # will remove the prefix "
+
+  if [ $blueprint_name == 'null' ]; then
+      echo "Unprocessable JSON file found. Is this definitely a Nutanix Calm blueprint file?"
+      exit 0
+  else
+      # got the blueprint name means it is probably a valid blueprint file, we can now continue the upload
+      echo "Uploading the updated blueprint: $blueprint_name..."
+
+
+      path_to_file=$JSONFile
+      bp_name=$blueprint_name
+      project_uuid=$project_uuid
+
+      upload_result=$(curl -s -k --insecure --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -F file=@$path_to_file -F name=$bp_name -F project_uuid=$project_uuid 'https://localhost:9440/api/nutanix/v3/blueprints/import_file')
+
+      #if the upload_result var is not empty then let's say it was succcessful
+      if [ -z "$upload_result" ]; then
+          echo "Upload for $bp_name did not finish."
+      else
+          echo "Upload for $bp_name finished."
+          echo "-----------------------------------------"
+          # echo "Result: $upload_result"
+      fi
+  fi
+
+  echo "Finished uploading ${BLUEPRINT}!"
+
+  #Getting the Blueprint UUID
+  CICDInfra_BLUEPRINT_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"blueprint","filter": "name==CICD_Infra.json"}' 'https://localhost:9440/api/nutanix/v3/blueprints/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+
+  echo "CICD Blueprint UUID = $CICDInfra_BLUEPRINT_UUID"
+
+  echo "Update Blueprint and writing to temp file"
+
+  echo "${CALM_PROJECT} network UUID: ${project_uuid}"
+  echo "SERVER_IMAGE=${SERVER_IMAGE}"
+  echo "SERVER_IMAGE_UUID=${SERVER_IMAGE_UUID}"
+  echo "NETWORK_UUID=${NETWORK_UUID}"
+
+  DOWNLOADED_JSONFile="${BLUEPRINT}-${CICDInfra_BLUEPRINT_UUID}.json"
+  UPDATED_JSONFile="${BLUEPRINT}-${CICDInfra_BLUEPRINT_UUID}-updated.json"
+
+  # GET The Blueprint so it can be updated
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X GET -d '{}' "https://localhost:9440/api/nutanix/v3/blueprints/${CICDInfra_BLUEPRINT_UUID}" > ${DOWNLOADED_JSONFile}
+
+  cat $DOWNLOADED_JSONFile \
+  | jq -c 'del(.status)' \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.name = \"$SERVER_IMAGE\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.uuid = \"$SERVER_IMAGE_UUID\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.nic_list[].subnet_reference.uuid = \"$NETWORK_UUID\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[1].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[1].create_spec.resources.nic_list[].subnet_reference.uuid = \"$NETWORK_UUID\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[2].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[2].create_spec.resources.nic_list[].subnet_reference.uuid = \"$NETWORK_UUID\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[3].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \
+  | jq -c -r "(.spec.resources.substrate_definition_list[3].create_spec.resources.nic_list[].subnet_reference.uuid = \"$NETWORK_UUID\")" \
+  | jq -c -r "(.spec.resources.credential_definition_list[0].secret.value=\"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAii7qFDhVadLx5lULAG/ooCUTA/ATSmXbArs+GdHxbUWd/bNG\nZCXnaQ2L1mSVVGDxfTbSaTJ3En3tVlMtD2RjZPdhqWESCaoj2kXLYSiNDS9qz3SK\n6h822je/f9O9CzCTrw2XGhnDVwmNraUvO5wmQObCDthTXc72PcBOd6oa4ENsnuY9\nHtiETg29TZXgCYPFXipLBHSZYkBmGgccAeY9dq5ywiywBJLuoSovXkkRJk3cd7Gy\nhCRIwYzqfdgSmiAMYgJLrz/UuLxatPqXts2D8v1xqR9EPNZNzgd4QHK4of1lqsNR\nuz2SxkwqLcXSw0mGcAL8mIwVpzhPzwmENC5OrwIBJQKCAQB++q2WCkCmbtByyrAp\n6ktiukjTL6MGGGhjX/PgYA5IvINX1SvtU0NZnb7FAntiSz7GFrODQyFPQ0jL3bq0\nMrwzRDA6x+cPzMb/7RvBEIGdadfFjbAVaMqfAsul5SpBokKFLxU6lDb2CMdhS67c\n1K2Hv0qKLpHL0vAdEZQ2nFAMWETvVMzl0o1dQmyGzA0GTY8VYdCRsUbwNgvFMvBj\n8T/svzjpASDifa7IXlGaLrXfCH584zt7y+qjJ05O1G0NFslQ9n2wi7F93N8rHxgl\nJDE4OhfyaDyLL1UdBlBpjYPSUbX7D5NExLggWEVFEwx4JRaK6+aDdFDKbSBIidHf\nh45NAoGBANjANRKLBtcxmW4foK5ILTuFkOaowqj+2AIgT1ezCVpErHDFg0bkuvDk\nQVdsAJRX5//luSO30dI0OWWGjgmIUXD7iej0sjAPJjRAv8ai+MYyaLfkdqv1Oj5c\noDC3KjmSdXTuWSYNvarsW+Uf2v7zlZlWesTnpV6gkZH3tX86iuiZAoGBAKM0mKX0\nEjFkJH65Ym7gIED2CUyuFqq4WsCUD2RakpYZyIBKZGr8MRni3I4z6Hqm+rxVW6Dj\nuFGQe5GhgPvO23UG1Y6nm0VkYgZq81TraZc/oMzignSC95w7OsLaLn6qp32Fje1M\nEz2Yn0T3dDcu1twY8OoDuvWx5LFMJ3NoRJaHAoGBAJ4rZP+xj17DVElxBo0EPK7k\n7TKygDYhwDjnJSRSN0HfFg0agmQqXucjGuzEbyAkeN1Um9vLU+xrTHqEyIN/Jqxk\nhztKxzfTtBhK7M84p7M5iq+0jfMau8ykdOVHZAB/odHeXLrnbrr/gVQsAKw1NdDC\nkPCNXP/c9JrzB+c4juEVAoGBAJGPxmp/vTL4c5OebIxnCAKWP6VBUnyWliFhdYME\nrECvNkjoZ2ZWjKhijVw8Il+OAjlFNgwJXzP9Z0qJIAMuHa2QeUfhmFKlo4ku9LOF\n2rdUbNJpKD5m+IRsLX1az4W6zLwPVRHp56WjzFJEfGiRjzMBfOxkMSBSjbLjDm3Z\niUf7AoGBALjvtjapDwlEa5/CFvzOVGFq4L/OJTBEBGx/SA4HUc3TFTtlY2hvTDPZ\ndQr/JBzLBUjCOBVuUuH3uW7hGhW+DnlzrfbfJATaRR8Ht6VU651T+Gbrr8EqNpCP\ngmznERCNf9Kaxl/hlyV5dZBe/2LIK+/jLGNu9EJLoraaCBFshJKF\n-----END RSA PRIVATE KEY-----\n\")" \
+  | jq -c -r '(.spec.resources.credential_definition_list[0].secret.attrs.is_secret_modified = "true")' \
+  > $UPDATED_JSONFile
+
+  echo "Saving Credentials Edits with PUT"
+
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X PUT -d @$UPDATED_JSONFile "https://localhost:9440/api/nutanix/v3/blueprints/${CICDInfra_BLUEPRINT_UUID}"
+
+  echo "Finished Updating Credentials"
+
+  echo "Finished CICDInfra Blueprint Deployment"
+
 }

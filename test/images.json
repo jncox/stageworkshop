@@ -1,0 +1,35 @@
+{
+    "api_response_list": [
+        {
+            "status": "202",
+            "api_response": {
+                "status": {
+                    "state": "PENDING",
+                    "execution_context": {
+                        "task_uuid": "6c6a2bfa-c74d-4bbe-a572-5aecae2aca42"
+                    }
+                },
+                "spec": {
+                    "name": "Nutanix-VirtIO-1.1.3",
+                    "resources": {
+                        "image_type": "ISO_IMAGE",
+                        "source_uri": "http://10.42.194.11/workshop_staging/Nutanix-VirtIO-1.1.3.iso"
+                    }
+                },
+                "api_version": "3.1",
+                "metadata": {
+                    "owner_reference": {
+                        "kind": "user",
+                        "uuid": "00000000-0000-0000-0000-000000000000",
+                        "name": "admin"
+                    },
+                    "use_categories_mapping": false,
+                    "kind": "image",
+                    "spec_version": 0,
+                    "uuid": "b959c4a4-c155-4e77-b10d-ee4ec38b753d"
+                }
+            },
+            "path_and_params": "/api/nutanix/v3/images"
+        }
+    ]
+}

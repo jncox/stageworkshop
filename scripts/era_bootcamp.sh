@@ -18,6 +18,8 @@ case ${1} in
   PE | pe )
     . lib.pe.sh
 
+    export AUTH_SERVER='AutoAD'
+
     args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable
 
@@ -33,15 +35,6 @@ case ${1} in
       && prism_check 'PC' \
 
       if (( $? == 0 )) ; then
-        ## TODO: If Debug is set we should run with bash -x. Maybe this???? Or are we going to use a fourth parameter
-        # if [ ! -z DEBUG ]; then
-        #    bash_cmd='bash'
-        # else
-        #    bash_cmd='bash -x'
-        # fi
-        # _command="EMAIL=${EMAIL} \
-        #   PC_HOST=${PC_HOST} PE_HOST=${PE_HOST} PE_PASSWORD=${PE_PASSWORD} \
-        #   PC_LAUNCH=${PC_LAUNCH} PC_VERSION=${PC_VERSION} nohup ${bash_cmd} ${HOME}/${PC_LAUNCH} IMAGES"
         _command="EMAIL=${EMAIL} \
            PC_HOST=${PC_HOST} PE_HOST=${PE_HOST} PE_PASSWORD=${PE_PASSWORD} \
            PC_LAUNCH=${PC_LAUNCH} PC_VERSION=${PC_VERSION} nohup bash ${HOME}/${PC_LAUNCH} IMAGES"
@@ -55,11 +48,8 @@ case ${1} in
         log "PE = https://${PE_HOST}:9440"
         log "PC = https://${PC_HOST}:9440"
 
-        files_install && sleep 30
 
-        create_file_server "${NW1_NAME}" "${NW2_NAME}" && sleep 30
-
-        file_analytics_install && sleep 30 && dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
+        #&& dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
         #dependencies 'remove' 'sshpass'
         finish
       fi
@@ -72,6 +62,33 @@ case ${1} in
   ;;
   PC | pc )
     . lib.pc.sh
+
+    export BUCKETS_DNS_IP="${IPV4_PREFIX}.16"
+    export BUCKETS_VIP="${IPV4_PREFIX}.17"
+    export OBJECTS_NW_START="${IPV4_PREFIX}.18"
+    export OBJECTS_NW_END="${IPV4_PREFIX}.21"
+
+    export QCOW2_IMAGES=(\
+      ERA-Server-build-1.2.0.1.qcow2 \
+      MSSQL-2016-VM.qcow2 \
+      Windows2016.qcow2 \
+      CentOS7.qcow2 \
+      WinToolsVM.qcow2 \
+      Linux_ToolsVM.qcow2 \
+      #GTSOracle/19c-april/19c-bootdisk.qcow2 \
+      #GTSOracle/19c-april/19c-disk1.qcow2 \
+      #GTSOracle/19c-april/19c-disk2.qcow2 \
+      #GTSOracle/19c-april/19c-disk3.qcow2 \
+      #GTSOracle/19c-april/19c-disk4.qcow2 \
+      #GTSOracle/19c-april/19c-disk5.qcow2 \
+      #GTSOracle/19c-april/19c-disk6.qcow2 \
+      #GTSOracle/19c-april/19c-disk7.qcow2 \
+      #GTSOracle/19c-april/19c-disk8.qcow2 \
+      #GTSOracle/19c-april/19c-disk9.qcow2 \
+    )
+    export ISO_IMAGES=(\
+      Nutanix-VirtIO-1.1.5.iso \
+    )
 
     run_once
 
@@ -115,16 +132,17 @@ case ${1} in
 
     ssp_auth \
     && calm_enable \
-    && karbon_enable \
     && lcm \
-    && karbon_image_download \
+    && pc_project \
     && images \
     && flow_enable \
     && pc_cluster_img_import \
+    && upload_era_calm_blueprint \
+    && sleep 30 \
     && prism_check 'PC'
 
     log "Non-blocking functions (in development) follow."
-    pc_project
+    #pc_project
     pc_admin
     # ntnx_download 'AOS' # function in lib.common.sh
 

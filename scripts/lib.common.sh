@@ -282,6 +282,89 @@ function images() {
   local      _source='source_uri'
   local        _test
 
+#######################################
+# For doing ISO IMAGES
+#######################################
+
+for _image in "${ISO_IMAGES[@]}" ; do
+
+  # log "DEBUG: ${_image} image.create..."
+  if [[ ${_cli} == 'nuclei' ]]; then
+    _test=$(source /etc/profile.d/nutanix_env.sh \
+      && ${_cli} image.list 2>&1 \
+      | grep -i complete \
+      | grep "${_image}")
+  #else
+  #  _test=$(source /etc/profile.d/nutanix_env.sh \
+  #    && ${_cli} image.list 2>&1 \
+  #    | grep "${_image}")
+  fi
+
+  if [[ ! -z ${_test} ]]; then
+    log "Skip: ${_image} already complete on cluster."
+  else
+    _command=''
+       _name="${_image}"
+
+    if (( $(echo "${_image}" | grep -i -e '^http' -e '^nfs' | wc --lines) )); then
+      log 'Bypass multiple repo source checks...'
+      SOURCE_URL="${_image}"
+    else
+      repo_source QCOW2_REPOS[@] "${_image}" # IMPORTANT: don't ${dereference}[array]!
+    fi
+
+    if [[ -z "${SOURCE_URL}" ]]; then
+      _error=30
+      log "Warning ${_error}: didn't find any sources for ${_image}, continuing..."
+      # exit ${_error}
+    fi
+
+    # TODO:0 TOFIX: acs-centos ugly override for today...
+    if (( $(echo "${_image}" | grep -i 'acs-centos' | wc --lines ) > 0 )); then
+      _name=acs-centos
+    fi
+
+    if [[ ${_cli} == 'acli' ]]; then
+      _image_type='kIsoImage'
+      _command+=" ${_name} annotation=${_image} image_type=${_image_type} \
+        container=${STORAGE_IMAGES} architecture=kX86_64 wait=true"
+    else
+      _command+=" name=${_name} description=\"${_image}\""
+    fi
+
+    if [[ ${_cli} == 'nuclei' ]]; then
+      _http_body=$(cat <<EOF
+{"action_on_failure":"CONTINUE",
+"execution_order":"SEQUENTIAL",
+"api_request_list":[
+{"operation":"POST",
+"path_and_params":"/api/nutanix/v3/images",
+"body":{"spec":
+{"name":"${_name}","description":"${_image}","resources":{
+  "image_type":"ISO_IMAGE",
+  "source_uri":"${SOURCE_URL}"}},
+"metadata":{"kind":"image"},"api_version":"3.1.0"}}],"api_version":"3.0"}
+EOF
+      )
+      _test=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data "${_http_body}" \
+        https://localhost:9440/api/nutanix/v3/batch)
+      log "batch _test=|${_test}|"
+    else
+
+      ${_cli} "image.create ${_command}" ${_source}=${SOURCE_URL} 2>&1 &
+      if (( $? != 0 )); then
+        log "Warning: Image submission: $?. Continuing..."
+        #exit 10
+      fi
+
+      if [[ ${_cli} == 'nuclei' ]]; then
+        log "NOTE: image.uuid = RUNNING, but takes a while to show up in:"
+        log "TODO: ${_cli} image.list, state = COMPLETE; image.list Name UUID State"
+      fi
+    fi
+  fi
+
+done
 
 #######################################
 # For doing Disk IMAGES
@@ -364,93 +447,57 @@ EOF
 
   done
 
-  #######################################
-  # For doing ISO IMAGES
-  #######################################
+}
 
-  for _image in "${ISO_IMAGES[@]}" ; do
+##################################################################################
+# Priority Images that need to be uploaded and controlled before we move to the mass upload
 
-    # log "DEBUG: ${_image} image.create..."
-    if [[ ${_cli} == 'nuclei' ]]; then
-      _test=$(source /etc/profile.d/nutanix_env.sh \
-        && ${_cli} image.list 2>&1 \
-        | grep -i complete \
-        | grep "${_image}")
-    #else
-    #  _test=$(source /etc/profile.d/nutanix_env.sh \
-    #    && ${_cli} image.list 2>&1 \
-    #    | grep "${_image}")
-    fi
+function priority_images(){
 
-    if [[ ! -z ${_test} ]]; then
-      log "Skip: ${_image} already complete on cluster."
+  local _prio_images_arr=(\
+          ERA-Server-build-1.2.0.1.qcow2 \
+          Windows2016.qcow2 \
+          CentOS7.qcow2 \
+          Citrix_Virtual_Apps_and_Desktops_7_1912.iso \
+          )
+  local CURL_HTTP_OPTS=" --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure "
+
+  # Set the correct High Perf FileServer
+  if [[ ${OCTET[1]} == '42' ]] || [[ ${OCTET[1]} == '38' ]]; then
+    SOURCE_URL="10.42.38.10/images"
+  else
+    SOURCE_URL="10.55.76.10"
+  fi
+
+  log "Grabbing the priority files from the ${SOURCE_URL} fileserver..."
+
+  for _image in "${_prio_images_arr[@]}"; do
+    if [[ ${_image} == *"iso"* ]]; then
+        DISK_TYPE="ISO_IMAGE"
     else
-      _command=''
-         _name="${_image}"
-
-      if (( $(echo "${_image}" | grep -i -e '^http' -e '^nfs' | wc --lines) )); then
-        log 'Bypass multiple repo source checks...'
-        SOURCE_URL="${_image}"
-      else
-        repo_source QCOW2_REPOS[@] "${_image}" # IMPORTANT: don't ${dereference}[array]!
-      fi
-
-      if [[ -z "${SOURCE_URL}" ]]; then
-        _error=30
-        log "Warning ${_error}: didn't find any sources for ${_image}, continuing..."
-        # exit ${_error}
-      fi
-
-      # TODO:0 TOFIX: acs-centos ugly override for today...
-      if (( $(echo "${_image}" | grep -i 'acs-centos' | wc --lines ) > 0 )); then
-        _name=acs-centos
-      fi
-
-      if [[ ${_cli} == 'acli' ]]; then
-        _image_type='kIsoImage'
-        _command+=" ${_name} annotation=${_image} image_type=${_image_type} \
-          container=${STORAGE_IMAGES} architecture=kX86_64 wait=true"
-      else
-        _command+=" name=${_name} description=\"${_image}\""
-      fi
-
-      if [[ ${_cli} == 'nuclei' ]]; then
-        _http_body=$(cat <<EOF
+        DISK_TYPE="DISK_IMAGE"
+    fi
+    _http_body=$(cat <<EOF
 {"action_on_failure":"CONTINUE",
 "execution_order":"SEQUENTIAL",
 "api_request_list":[
   {"operation":"POST",
   "path_and_params":"/api/nutanix/v3/images",
   "body":{"spec":
-  {"name":"${_name}","description":"${_image}","resources":{
-    "image_type":"ISO_IMAGE",
-    "source_uri":"${SOURCE_URL}"}},
+  {"name":"${_image}","description":"${_image}","resources":{
+    "image_type":"${DISK_TYPE}",
+    "source_uri":"http://${SOURCE_URL}/${_image}"}},
   "metadata":{"kind":"image"},"api_version":"3.1.0"}}],"api_version":"3.0"}
 EOF
-        )
-        _test=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data "${_http_body}" \
-          https://localhost:9440/api/nutanix/v3/batch)
-        log "batch _test=|${_test}|"
-      else
-
-        ${_cli} "image.create ${_command}" ${_source}=${SOURCE_URL} 2>&1 &
-        if (( $? != 0 )); then
-          log "Warning: Image submission: $?. Continuing..."
-          #exit 10
-        fi
-
-        if [[ ${_cli} == 'nuclei' ]]; then
-          log "NOTE: image.uuid = RUNNING, but takes a while to show up in:"
-          log "TODO: ${_cli} image.list, state = COMPLETE; image.list Name UUID State"
-        fi
-      fi
-    fi
+    )
+  _task_id=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data "${_http_body}" https://localhost:9440/api/nutanix/v3/batch| jq '.api_response_list[].api_response.status.execution_context.task_uuid' | tr -d \")
+  loop ${_task_id}
 
   done
+
 }
 
 ##################################################################################
-
 
 function log() {
   local _caller
@@ -971,4 +1018,39 @@ function ssh_pubkey() {
   else
     log "IDEMPOTENCY: found pubkey ${_name}"
   fi
+}
+
+###############################################################################################################################################################################
+# Routine to be run/loop till yes we are ok.
+###############################################################################################################################################################################
+# Need to grab the percentage_complete value including the status to make disissions
+
+# TODO: Also look at the status!!
+
+function loop(){
+
+  local _attempts=45
+  local _loops=0
+  local _sleep=60
+  local _url_progress='https://localhost:9440/api/nutanix/v3/tasks'
+  local CURL_HTTP_OPTS=" --max-time 25 --silent --header Content-Type:application/json --header Accept:application/json  --insecure "
+
+  echo ${_task_id}
+  # What is the progress of the taskid??
+  while true; do
+    (( _loops++ ))
+    # Get the progress of the task
+    _progress=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} ${_url_progress}/${_task_id} | jq '.percentage_complete' 2>nul | tr -d \")
+
+    if (( ${_progress} == 100 )); then
+      log "The step has been succesfuly run"
+      break;
+    elif (( ${_loops} > ${_attempts} )); then
+      log "Warning ${_error} @${1}: Giving up after ${_loop} tries."
+      return ${_error}
+    else
+      log "Still running... loop $_loops/$_attempts. Step is at ${_progress}% ...Sleeping ${_sleep} seconds"
+      sleep ${_sleep}
+    fi
+  done
 }

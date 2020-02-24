@@ -1,1 +1,11 @@
-10.42.86.37|techX2019!|willem@nutanix.com
+10.42.81.37|techX2020!|willem@nutanix.com
+10.42.84.37|techX2020!|willem@nutanix.com
+10.42.86.37|techX2020!|willem@nutanix.com
+10.42.95.37|techX2020!|willem@nutanix.com
+10.42.96.37|techX2020!|willem@nutanix.com
+10.42.99.37|techX2020!|willem@nutanix.com
+10.42.104.37|techX2020!|willem@nutanix.com
+10.42.108.37|techX2020!|willem@nutanix.com
+10.42.110.37|techX2020!|willem@nutanix.com
+10.42.112.37|techX2020!|willem@nutanix.com
+10.42.114.37|techX2020!|willem@nutanix.com
