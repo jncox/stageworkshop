@@ -19,12 +19,12 @@ WORKSHOPS=(\
 "In Development Bootcamp Staging (AOS 5.11+/AHV PC 5.11.2.1) = Development" \
 "In Development SNC (1-Node) Bootcamp Staging (AOS 5.11+/AHV PC 5.11.2.1) = Development" \
 "Tech Summit 2020 (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
-"SNC_GTS 2020 (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
+#"SNC_GTS 2020 (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 #"Tech Summit 2019 (AOS 5.10+/AHV PC 5.10+) = Stable" \
 "Citrix Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
-"Era Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
-#"Files Bootcamp (AOS 5.11+/AHV PC 5.11+) = Development" \
-#"Calm Workshop (AOS 5.8.x/AHV PC 5.8.x) = Stable" \
+"Databases with Era Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
+"Files Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
+"Calm Workshop (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 ) # Adjust function stage_clusters, below, for file/script mappings as needed
 
 function stage_clusters() {
@@ -64,9 +64,9 @@ function stage_clusters() {
     _pe_launch='snc_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
-  if (( $(echo ${_workshop} | grep -i Calm | wc ${WC_ARG}) > 0 )); then
+  if (( $(echo ${_workshop} | grep -i "^Calm" | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh lib.pc.sh'
-    _pe_launch='calm.sh'
+    _pe_launch='calm_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
   if (( $(echo ${_workshop} | grep -i "^Citrix" | wc ${WC_ARG}) > 0 )); then
@@ -79,7 +79,7 @@ function stage_clusters() {
     _pe_launch='era_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
-  if (( $(echo ${_workshop} | grep -i Files | wc ${WC_ARG}) > 0 )); then
+  if (( $(echo ${_workshop} | grep -i "^Files" | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh'
     _pe_launch='files_bootcamp.sh'
     _pc_launch=${_pe_launch}
@@ -96,7 +96,7 @@ function stage_clusters() {
   fi
   if (( $(echo ${_workshop} | grep -i "^Frame" | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh lib.pc.sh'
-    _pe_launch='frame.sh'
+    _pe_launch='frame_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
 
@@ -247,7 +247,7 @@ function validate_clusters() {
     set -f
     # shellcheck disable=2206
         _fields=(${_cluster//|/ })
-        PE_HOST=${_fields[0]} 
+        PE_HOST=${_fields[0]}
     PE_PASSWORD=${_fields[1]}
 
     prism_check 'PE'

@@ -75,16 +75,6 @@ case ${1} in
       CentOS7.qcow2 \
       WinToolsVM.qcow2 \
       Linux_ToolsVM.qcow2 \
-      #GTSOracle/19c-april/19c-bootdisk.qcow2 \
-      #GTSOracle/19c-april/19c-disk1.qcow2 \
-      #GTSOracle/19c-april/19c-disk2.qcow2 \
-      #GTSOracle/19c-april/19c-disk3.qcow2 \
-      #GTSOracle/19c-april/19c-disk4.qcow2 \
-      #GTSOracle/19c-april/19c-disk5.qcow2 \
-      #GTSOracle/19c-april/19c-disk6.qcow2 \
-      #GTSOracle/19c-april/19c-disk7.qcow2 \
-      #GTSOracle/19c-april/19c-disk8.qcow2 \
-      #GTSOracle/19c-april/19c-disk9.qcow2 \
     )
     export ISO_IMAGES=(\
       Nutanix-VirtIO-1.1.5.iso \

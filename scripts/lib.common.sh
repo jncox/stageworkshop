@@ -306,7 +306,7 @@ for _image in "${ISO_IMAGES[@]}" ; do
     _command=''
        _name="${_image}"
 
-    if (( $(echo "${_image}" | grep -i -e '^http' -e '^nfs' | wc --lines) )); then
+    if (( $(echo "${_image}" | grep -i -e '^http' -e '^nfs' | wc -l) )); then
       log 'Bypass multiple repo source checks...'
       SOURCE_URL="${_image}"
     else
@@ -320,7 +320,7 @@ for _image in "${ISO_IMAGES[@]}" ; do
     fi
 
     # TODO:0 TOFIX: acs-centos ugly override for today...
-    if (( $(echo "${_image}" | grep -i 'acs-centos' | wc --lines ) > 0 )); then
+    if (( $(echo "${_image}" | grep -i 'acs-centos' | wc -l ) > 0 )); then
       _name=acs-centos
     fi
 
@@ -387,7 +387,7 @@ done
       _command=''
          _name="${_image}"
 
-      if (( $(echo "${_image}" | grep -i -e '^http' -e '^nfs' | wc --lines) )); then
+      if (( $(echo "${_image}" | grep -i -e '^http' -e '^nfs' | wc -l) )); then
         log 'Bypass multiple repo source checks...'
         SOURCE_URL="${_image}"
       else
@@ -401,7 +401,7 @@ done
       fi
 
       # TODO:0 TOFIX: acs-centos ugly override for today...
-      if (( $(echo "${_image}" | grep -i 'acs-centos' | wc --lines ) > 0 )); then
+      if (( $(echo "${_image}" | grep -i 'acs-centos' | wc -l ) > 0 )); then
         _name=acs-centos
       fi
 
@@ -522,7 +522,7 @@ function ntnx_cmd() {
       _hold=$(source /etc/profile ; nuclei cluster.list 2>&1)
     _status=$?
 
-    if (( $(echo "${_hold}" | grep websocket | wc --lines) > 0 )); then
+    if (( $(echo "${_hold}" | grep websocket | wc -l) > 0 )); then
       log "Warning: Zookeeper isn't up yet."
     elif (( ${_status} > 0 )); then
        log "${_status} = ${_hold}, uh oh!"
@@ -653,7 +653,7 @@ function ntnx_download() {
     _source_url=$(cat ${_meta_url##*/} | jq -r .download_url_cdn)
   fi
 
-  if (( $(pgrep curl | wc --lines | tr -d '[:space:]') > 0 )); then
+  if (( $(pgrep curl | wc -l | tr -d '[:space:]') > 0 )); then
     pkill curl
   fi
   log "Retrieving Nutanix ${_ncli_softwaretype} bits..."
@@ -923,31 +923,32 @@ function repo_source() {
 
   if [[ -z ${_package} ]]; then
     _suffix=${_candidates[0]##*/}
-    if (( $(echo "${_suffix}" | grep . | wc --lines) > 0)); then
+    if (( $(echo "${_suffix}" | grep . | wc -l) > 0)); then
       log "Convenience: omitted package argument, added package=${_package}"
       _package="${_suffix}"
     fi
   fi
   # Prepend your local HTTP cache...
-  _candidates=( "http://${HTTP_CACHE_HOST}:${HTTP_CACHE_PORT}/" "${_candidates[@]}" )
+  #_candidates=( "http://${HTTP_CACHE_HOST}:${HTTP_CACHE_PORT}/" "${_candidates[@]}" )
 
   while (( ${_index} < ${#_candidates[@]} ))
   do
+    echo ${_candidates[${_index}]}
     unset SOURCE_URL
 
     # log "DEBUG: ${_index} ${_candidates[${_index}]}, OPTIONAL: _package=${_package}"
     _url=${_candidates[${_index}]}
 
     if [[ -z ${_package} ]]; then
-      if (( $(echo "${_url}" | grep '/$' | wc --lines) == 0 )); then
+      if (( $(echo "${_url}" | grep '/$' | wc -l) == 0 )); then
         log "error ${_error}: ${_url} doesn't end in trailing slash, please correct."
         exit ${_error}
       fi
-    elif (( $(echo "${_url}" | grep '/$' | wc --lines) == 1 )); then
+    elif (( $(echo "${_url}" | grep '/$' | wc -l) == 1 )); then
       _url+="${_package}"
     fi
 
-    if (( $(echo "${_url}" | grep '^nfs' | wc --lines) == 1 )); then
+    if (( $(echo "${_url}" | grep '^nfs' | wc -l) == 1 )); then
       log "warning: TODO: cURL can't test nfs URLs...assuming a pass!"
       export SOURCE_URL="${_url}"
       break

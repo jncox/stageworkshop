@@ -1632,11 +1632,14 @@ function upload_karbon_calm_blueprint() {
 
   # Launch the BLUEPRINT
 
-  #echo "Launching the Era Server Application"
+  log "Sleep 30 seconds so the blueprint can settle in......"
+  sleep 30
+  
+  log "Launching the Karbon Cluster Blueprint"
 
-  #curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d @set_blueprint_response_file.json "https://localhost:9440/api/nutanix/v3/blueprints/${KARBON_BLUEPRINT_UUID}/launch"
+  curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d @set_blueprint_response_file.json "https://localhost:9440/api/nutanix/v3/blueprints/${KARBON_BLUEPRINT_UUID}/launch"
 
-  #echo "Finished Launching the Karbon Cluster Deployment Blueprint"
+  log "Finished Launching the Karbon Cluster Deployment Blueprint"
 
 }
 
@@ -1649,8 +1652,6 @@ function upload_CICDInfra_calm_blueprint() {
   local BLUEPRINT=${CICDInfra_Blueprint}
   local CALM_PROJECT="BootcampInfra"
   local NETWORK_NAME=${NW1_NAME}
-  local VLAN_NAME=${NW1_VLAN}
-  #local CENTOS_PASSWORD=$(awk '{printf "%s\\n", $0}' ${DIRECTORY}/${CALM_RSA_KEY_FILE})
   local DOWNLOAD_BLUEPRINTS
   local NETWORK_UUID
   local SERVER_IMAGE="CentOS7.qcow2"
@@ -1662,29 +1663,6 @@ function upload_CICDInfra_calm_blueprint() {
   echo "Starting CICDInfra Blueprint Deployment"
 
   mkdir $DIRECTORY
-
-  echo "Getting Server Image UUID"
-  #Getting the IMAGE_UUID -- WHen changing the image make sure to change in the name filter
-  _loops="0"
-  _maxtries="75"
-
-  SERVER_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d {} 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'CentOS7.qcow2' | wc -l)
-  # The response should be a Task UUID
-  while [[ $SERVER_IMAGE_UUID_CHECK -ne 1 && $_loops -lt $_maxtries ]]; do
-      log "Image not yet uploaded. $_loops/$_maxtries... sleeping 60 seconds"
-      sleep 60
-      SERVER_IMAGE_UUID_CHECK=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST -d {} 'https://localhost:9440/api/nutanix/v3/images/list' | grep 'CentOS7.qcow2' | wc -l)
-      (( _loops++ ))
-  done
-  if [[ $_loops -lt $_maxtries ]]; then
-      log "Image has been uploaded."
-      SERVER_IMAGE_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"image","filter": "name==CentOS7.qcow2"}' 'https://localhost:9440/api/nutanix/v3/images/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
-  else
-      log "Image is not upload, please check."
-  fi
-
-  echo "Server Image UUID = $SERVER_IMAGE_UUID"
-  echo "-----------------------------------------"
 
   NETWORK_UUID=$(curl ${CURL_HTTP_OPTS} --request POST 'https://localhost:9440/api/nutanix/v3/subnets/list' --user ${PRISM_ADMIN}:${PE_PASSWORD} --data '{"kind":"subnet","filter": "name==Primary"}' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
 
@@ -1773,15 +1751,13 @@ function upload_CICDInfra_calm_blueprint() {
   echo "Finished uploading ${BLUEPRINT}!"
 
   #Getting the Blueprint UUID
-  CICDInfra_BLUEPRINT_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"blueprint","filter": "name==CICD_Infra.json"}' 'https://localhost:9440/api/nutanix/v3/blueprints/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
+  CICDInfra_BLUEPRINT_UUID=$(curl ${CURL_HTTP_OPTS} --user ${PRISM_ADMIN}:${PE_PASSWORD} -X POST --data '{"kind":"blueprint","filter": "name==CICD_Infra"}' 'https://localhost:9440/api/nutanix/v3/blueprints/list' | jq -r '.entities[] | .metadata.uuid' | tr -d \")
 
   echo "CICD Blueprint UUID = $CICDInfra_BLUEPRINT_UUID"
 
   echo "Update Blueprint and writing to temp file"
 
   echo "${CALM_PROJECT} network UUID: ${project_uuid}"
-  echo "SERVER_IMAGE=${SERVER_IMAGE}"
-  echo "SERVER_IMAGE_UUID=${SERVER_IMAGE_UUID}"
   echo "NETWORK_UUID=${NETWORK_UUID}"
 
   DOWNLOADED_JSONFile="${BLUEPRINT}-${CICDInfra_BLUEPRINT_UUID}.json"
@@ -1792,8 +1768,6 @@ function upload_CICDInfra_calm_blueprint() {
 
   cat $DOWNLOADED_JSONFile \
   | jq -c 'del(.status)' \
-  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.name = \"$SERVER_IMAGE\")" \
-  | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.disk_list[0].data_source_reference.uuid = \"$SERVER_IMAGE_UUID\")" \
   | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \
   | jq -c -r "(.spec.resources.substrate_definition_list[0].create_spec.resources.nic_list[].subnet_reference.uuid = \"$NETWORK_UUID\")" \
   | jq -c -r "(.spec.resources.substrate_definition_list[1].create_spec.resources.nic_list[].subnet_reference.name = \"$NETWORK_NAME\")" \

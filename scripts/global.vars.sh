@@ -190,8 +190,8 @@ case "${OCTET[0]}.${OCTET[1]}" in
        #'http://mirror.centos.org/centos/7/extras/x86_64/Packages/sshpass-1.06-2.el7.x86_64.rpm' \
     )
     QCOW2_REPOS=(\
-       'http://10.55.251.38/workshop_staging/' \
        'http://10.55.76.10/' \
+       'http://10.55.251.38/workshop_staging/' \
        'https://s3.amazonaws.com/get-ahv-images/' \
     )
     AUTODC_REPOS=(\
@@ -228,9 +228,9 @@ case "${OCTET[0]}.${OCTET[1]}" in
        #'http://mirror.centos.org/centos/7/extras/x86_64/Packages/sshpass-1.06-2.el7.x86_64.rpm' \
     )
     QCOW2_REPOS=(\
-       'http://10.42.194.11/workshop_staging/' \
-       'http://10.42.38.10/images' \
-       'https://s3.amazonaws.com/get-ahv-images/' \
+         'http://10.42.38.10/images' \
+         'http://10.42.194.11/workshop_staging/' \
+         'https://s3.amazonaws.com/get-ahv-images/' \
     )
     AUTODC_REPOS=(\
      'http://10.42.194.11/workshop_staging/AutoDC2.qcow2' \
@@ -266,10 +266,10 @@ case "${OCTET[0]}.${OCTET[1]}" in
          #'http://mirror.centos.org/centos/7/extras/x86_64/Packages/sshpass-1.06-2.el7.x86_64.rpm' \
       )
     QCOW2_REPOS=(\
-         'http://10.42.194.11/workshop_staging/' \
          'http://10.42.38.10/images' \
+         'http://10.42.194.11/workshop_staging/' \
          'https://s3.amazonaws.com/get-ahv-images/' \
-      )
+    )
     AUTODC_REPOS=(\
        'http://10.42.194.11/workshop_staging/AutoDC2.qcow2' \
        'https://s3.amazonaws.com/get-ahv-images/AutoDC2.qcow2' \
@@ -281,7 +281,12 @@ case "${OCTET[0]}.${OCTET[1]}" in
     PC_DATA='http://10.42.38.10/images/seedPC.zip'
     BLUEPRINT_URL='http://10.42.194.11/workshop_staging/CalmBlueprints/'
     DNS_SERVERS="10.42.196.10,10.42.194.10"
-	OBJECTS_OFFLINE_REPO='http://10.42.194.11/workshop_staging/objects'
+	  OBJECTS_OFFLINE_REPO='http://10.42.194.11/workshop_staging/objects'
+
+    # If the third OCTET is between 170 and 199, we need to have the +3 vlan for the secondary
+    if [[ ${OCTET[2]} -gt 169 ]]; then
+      NW2_VLAN=$((OCTET[2]*10+3))
+    fi
       ;;
   10.132 ) # https://sewiki.nutanix.com/index.php/SH-COLO-IP-ADDR
     JQ_REPOS=(\

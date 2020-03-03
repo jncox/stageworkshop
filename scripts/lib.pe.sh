@@ -79,7 +79,7 @@ function authentication_source() {
         log "Power on ${AUTH_SERVER} VM..."
         acli "vm.on ${AUTH_SERVER}"
 
-        _attempts=25
+        _attempts=45
             _loop=0
            _sleep=60
 
@@ -467,7 +467,7 @@ function create_file_analytics_server() {
   log "Get ${STORAGE_DEFAULT} Container UUID"
   _storage_default_uuid=$(ncli container ls name=${STORAGE_DEFAULT} | grep Uuid | grep -v Pool | cut -f 2 -d ':' | xargs)
 
-  echo "${_nw_name} network UUID: ${_nw_uuid}"
+  echo "Secondary network UUID: ${_nw_uuid}"
   echo "${STORAGE_DEFAULT} storage container UUID: ${_storage_default_uuid}"
 
 
