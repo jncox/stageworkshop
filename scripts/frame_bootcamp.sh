@@ -22,13 +22,85 @@ case ${1} in
     export PrismOpsServer='GTSPrismOpsLabUtilityServer'
     export SeedPC='GTSseedPC.zp'
 
+    # Networking needs for Frame Bootcamp
+    export NW2_DHCP_START="${IPV4_PREFIX}.132"
+    export NW2_DHCP_END="${IPV4_PREFIX}.139"
+    export NW2_DHCP_START2="${IPV4_PREFIX}.250"
+    export NW2_DHCP_END2="${IPV4_PREFIX}.253"
+
+    export USERNW01_NAME='User01-Network'
+    export USERNW01_VLAN=$((OCTET[2]*10+1))
+    export USERNW01_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW01_DHCP_START="${IPV4_PREFIX}.140"
+    export USERNW01_DHCP_END="${IPV4_PREFIX}.149"
+
+    export USERNW02_NAME='User02-Network'
+    export USERNW02_VLAN=$((OCTET[2]*10+1))
+    export USERNW02="${IPV4_PREFIX}.129/25"
+    export USERNW02_DHCP_START="${IPV4_PREFIX}.150"
+    export USERNW02_DHCP_END="${IPV4_PREFIX}.159"
+
+    export USERNW03_NAME='User03-Network'
+    export USERNW03_VLAN=$((OCTET[2]*10+1))
+    export USERNW03_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW03_DHCP_START="${IPV4_PREFIX}.160"
+    export USERNW03_DHCP_END="${IPV4_PREFIX}.169"
+
+    export USERNW04_NAME='User04-Network'
+    export USERNW04_VLAN=$((OCTET[2]*10+1))
+    export USERNW04_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW04_DHCP_START="${IPV4_PREFIX}.170"
+    export USERNW04_DHCP_END="${IPV4_PREFIX}.179"
+
+    export USERNW05_NAME='User05-Network'
+    export USERNW05_VLAN=$((OCTET[2]*10+1))
+    export USERNW05_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW05_DHCP_START="${IPV4_PREFIX}.180"
+    export USERNW05_DHCP_END="${IPV4_PREFIX}.189"
+
+    export USERNW06_NAME='User06-Network'
+    export USERNW06_VLAN=$((OCTET[2]*10+1))
+    export USERNW06_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW06_DHCP_START="${IPV4_PREFIX}.190"
+    export USERNW06_DHCP_END="${IPV4_PREFIX}.199"
+
+    export USERNW07_NAME='User07-Network'
+    export USERNW07_VLAN=$((OCTET[2]*10+1))
+    export USERNW07_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW07_DHCP_START="${IPV4_PREFIX}.200"
+    export USERNW07_DHCP_END="${IPV4_PREFIX}.209"
+
+    export USERNW08_NAME='User08-Network'
+    export USERNW08_VLAN=$((OCTET[2]*10+1))
+    export USERNW08_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW08_DHCP_START="${IPV4_PREFIX}.210"
+    export USERNW08_DHCP_END="${IPV4_PREFIX}.219"
+
+    export USERNW09_NAME='User09-Network'
+    export USERNW09_VLAN=$((OCTET[2]*10+1))
+    export USERNW09_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW09_DHCP_START="${IPV4_PREFIX}.220"
+    export USERNW09_DHCP_END="${IPV4_PREFIX}.229"
+
+    export USERNW10_NAME='User10-Network'
+    export USERNW10_VLAN=$((OCTET[2]*10+1))
+    export USERNW10_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW10_DHCP_START="${IPV4_PREFIX}.230"
+    export USERNW10_DHCP_END="${IPV4_PREFIX}.239"
+
+    export USERNW11_NAME='User11-Network'
+    export USERNW11_VLAN=$((OCTET[2]*10+1))
+    export USERNW11_SUBNET="${IPV4_PREFIX}.129/25"
+    export USERNW11_DHCP_START="${IPV4_PREFIX}.240"
+    export USERNW11_DHCP_END="${IPV4_PREFIX}.249"
+
     args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable
 
     dependencies 'install' 'sshpass' && dependencies 'install' 'jq' \
     && pe_license \
     && pe_init \
-    && network_configure \
+    && frame_network_configure \
     && authentication_source \
     && pe_auth \
     && prism_pro_server_deploy \
@@ -81,6 +153,22 @@ case ${1} in
   ;;
   PC | pc )
     . lib.pc.sh
+
+    export BUCKETS_DNS_IP="${IPV4_PREFIX}.16"
+    export BUCKETS_VIP="${IPV4_PREFIX}.17"
+    export OBJECTS_NW_START="${IPV4_PREFIX}.18"
+    export OBJECTS_NW_END="${IPV4_PREFIX}.21"
+
+    export QCOW2_IMAGES=(\
+      Windows2016.qcow2 \
+      Win10v1903.qcow2 \
+      WinToolsVM.qcow2 \
+    )
+    export ISO_IMAGES=(\
+      FrameCCA-2.1.0.iso \
+      FrameGuestAgentInstaller_1.0.2.2_7930.iso \
+      Nutanix-VirtIO-1.1.5.iso \
+    )
 
     run_once
 

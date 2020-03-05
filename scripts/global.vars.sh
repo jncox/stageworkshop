@@ -146,15 +146,6 @@ case "${OCTET[3]}" in
 
 esac
 
-# Networking needs for Era Bootcamp
-NW3_NAME='EraManaged'
-NW3_VLAN=$((OCTET[2]*10+1))
-NW3_SUBNET="${IPV4_PREFIX}.129/25"
-
-# Networking needs for Frame Bootcamp
-
-
-
 # Stuff needed for object_store
 OBJECTS_OFFLINE_REPO='http://10.42.194.11/workshop_staging/objects'
 VLAN=${OCTET[2]}
