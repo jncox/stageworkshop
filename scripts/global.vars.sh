@@ -146,6 +146,15 @@ case "${OCTET[3]}" in
 
 esac
 
+# Networking needs for Era Bootcamp
+NW3_NAME='EraManaged'
+NW3_VLAN=$((OCTET[2]*10+1))
+NW3_SUBNET="${IPV4_PREFIX}.129/25"
+
+# Networking needs for Frame Bootcamp
+
+
+
 # Stuff needed for object_store
 OBJECTS_OFFLINE_REPO='http://10.42.194.11/workshop_staging/objects'
 VLAN=${OCTET[2]}
@@ -228,7 +237,7 @@ case "${OCTET[0]}.${OCTET[1]}" in
        #'http://mirror.centos.org/centos/7/extras/x86_64/Packages/sshpass-1.06-2.el7.x86_64.rpm' \
     )
     QCOW2_REPOS=(\
-         'http://10.42.38.10/images' \
+         'http://10.42.38.10/images/' \
          'http://10.42.194.11/workshop_staging/' \
          'https://s3.amazonaws.com/get-ahv-images/' \
     )
@@ -266,7 +275,7 @@ case "${OCTET[0]}.${OCTET[1]}" in
          #'http://mirror.centos.org/centos/7/extras/x86_64/Packages/sshpass-1.06-2.el7.x86_64.rpm' \
       )
     QCOW2_REPOS=(\
-         'http://10.42.38.10/images' \
+         'http://10.42.38.10/images/' \
          'http://10.42.194.11/workshop_staging/' \
          'https://s3.amazonaws.com/get-ahv-images/' \
     )

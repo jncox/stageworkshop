@@ -124,17 +124,14 @@ case ${1} in
 
     ssp_auth \
     && calm_enable \
-    && karbon_enable \
-    && objects_enable \
     && lcm \
-    && object_store \
-    && karbon_image_download \
+    && pc_project \
     && images \
     && flow_enable \
     && prism_check 'PC'
 
     log "Non-blocking functions (in development) follow."
-    pc_project
+    #pc_project
     pc_admin
     # ntnx_download 'AOS' # function in lib.common.sh
 

@@ -21,8 +21,9 @@ WORKSHOPS=(\
 "Tech Summit 2020 (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 #"SNC_GTS 2020 (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 #"Tech Summit 2019 (AOS 5.10+/AHV PC 5.10+) = Stable" \
-"Citrix Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
+"Private Cloud Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 "Databases with Era Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
+"Citrix Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 "Files Bootcamp (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 "Calm Workshop (AOS 5.11.x/AHV PC 5.11.2.1) = Development" \
 ) # Adjust function stage_clusters, below, for file/script mappings as needed
@@ -64,6 +65,11 @@ function stage_clusters() {
     _pe_launch='snc_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
+  if (( $(echo ${_workshop} | grep -i "^Private Cloud" | wc ${WC_ARG}) > 0 )); then
+    _libraries+='lib.pe.sh lib.pc.sh'
+    _pe_launch='privatecloud_bootcamp.sh'
+    _pc_launch=${_pe_launch}
+  fi
   if (( $(echo ${_workshop} | grep -i "^Calm" | wc ${WC_ARG}) > 0 )); then
     _libraries+='lib.pe.sh lib.pc.sh'
     _pe_launch='calm_bootcamp.sh'
@@ -74,13 +80,13 @@ function stage_clusters() {
     _pe_launch='citrix_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
-  if (( $(echo ${_workshop} | grep -i "^Era" | wc ${WC_ARG}) > 0 )); then
-    _libraries+='lib.pe.sh'
+  if (( $(echo ${_workshop} | grep -i "^Databases" | wc ${WC_ARG}) > 0 )); then
+    _libraries+='lib.pe.sh lib.pc.sh'
     _pe_launch='era_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi
   if (( $(echo ${_workshop} | grep -i "^Files" | wc ${WC_ARG}) > 0 )); then
-    _libraries+='lib.pe.sh'
+    _libraries+='lib.pe.sh lib.pc.sh'
     _pe_launch='files_bootcamp.sh'
     _pc_launch=${_pe_launch}
   fi

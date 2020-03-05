@@ -19,6 +19,8 @@ case ${1} in
     . lib.pe.sh
 
     export AUTH_SERVER='AutoAD'
+    export NW2_DHCP_START="${IPV4_PREFIX}.132"
+    export NW2_DHCP_END="${IPV4_PREFIX}.249"
 
     args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable
@@ -26,7 +28,7 @@ case ${1} in
     dependencies 'install' 'sshpass' && dependencies 'install' 'jq' \
     && pe_license \
     && pe_init \
-    && network_configure \
+    && era_network_configure\
     && authentication_source \
     && pe_auth
 

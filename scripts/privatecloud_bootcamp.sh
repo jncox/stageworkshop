@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# -x
+ #-x
 
 #__main()__________
 
-# Source Nutanix environment (PATH + aliases), then Workshop common routines + global variables
+# Source Nutanix environment (PATH + aliases), then common routines + global variables
 . /etc/profile.d/nutanix_env.sh
 . lib.common.sh
 . global.vars.sh
@@ -18,11 +18,24 @@ case ${1} in
   PE | pe )
     . lib.pe.sh
 
+    #export PC_DEV_VERSION='5.10.2'
+    #export PC_DEV_METAURL='http://10.42.8.50/images/pcdeploy-5.10.2.json'
+    #export         PC_URL='http://10.42.8.50/images/euphrates-5.10.2-stable-prism_central.tar'
+    #export PC_DEV_METAURL='https://s3.amazonaws.com/get-ahv-images/pcdeploy-5.10.1.1.json'
+    #export         PC_URL='https://s3.amazonaws.com/get-ahv-images/euphrates-5.10.1.1-stable-prism_central.tar'
+    #export  FILES_VERSION='3.2.0.1'
+    #export  FILES_METAURL='http://10.42.8.50/images/nutanix-afs-el7.3-release-afs-3.2.0.1-stable-metadata.json'
+    #export      FILES_URL='http://10.42.8.50/images/nutanix-afs-el7.3-release-afs-3.2.0.1-stable.qcow2'
+    #export  FILES_METAURL='https://s3.amazonaws.com/get-ahv-images/nutanix-afs-el7.3-release-afs-3.2.0.1-stable-metadata.json'
+    #export      FILES_URL='https://s3.amazonaws.com/get-ahv-images/nutanix-afs-el7.3-release-afs-3.2.0.1-stable.qcow2'
+
     export AUTH_SERVER='AutoAD'
     export PrismOpsServer='GTSPrismOpsLabUtilityServer'
     export SeedPC='GTSseedPC.zp'
 
-    args_required 'EMAIL PE_HOST PE_PASSWORD PC_VERSION'
+    export _external_nw_name="${1}"
+
+    args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable
 
     dependencies 'install' 'sshpass' && dependencies 'install' 'jq' \
@@ -59,9 +72,6 @@ case ${1} in
         log "PE = https://${PE_HOST}:9440"
         log "PC = https://${PC_HOST}:9440"
 
-        deploy_peer_mgmt_server "${PMC}" \
-        && deploy_peer_agent_server "${AGENTA}" \
-        && deploy_peer_agent_server "${AGENTB}"
         #&& dependencies 'remove' 'jq' & # parallel, optional. Versus: $0 'files' &
         #dependencies 'remove' 'sshpass'
         finish
@@ -72,7 +82,6 @@ case ${1} in
       log "Error ${_error}: in main functional chain, exit!"
       exit ${_error}
     fi
-
   ;;
   PC | pc )
     . lib.pc.sh
@@ -84,13 +93,17 @@ case ${1} in
 
     export QCOW2_IMAGES=(\
       Windows2016.qcow2 \
-      Win10v1903.qcow2 \
+      CentOS7.qcow2 \
       WinToolsVM.qcow2 \
+      Linux_ToolsVM.qcow2 \
+      HYCU/Mine/HYCU-4.0.3-Demo.qcow2 \
+      veeam/VeeamAHVProxy2.0.404.qcow2 \
     )
     export ISO_IMAGES=(\
-      Citrix_Virtual_Apps_and_Desktops_7_1912.iso \
       Nutanix-VirtIO-1.1.5.iso \
+      veeam/VBR_10.0.0.4442.iso \
     )
+
 
     run_once
 
@@ -134,13 +147,16 @@ case ${1} in
 
     ssp_auth \
     && calm_enable \
+    && karbon_enable \
     && objects_enable \
     && lcm \
     && pc_project \
     && object_store \
-    && images \
+    && karbon_image_download \
     && flow_enable \
     && pc_cluster_img_import \
+    && seedPC \
+    && images \
     && prism_check 'PC'
 
     log "Non-blocking functions (in development) follow."
@@ -165,30 +181,3 @@ case ${1} in
     files_install
   ;;
 esac
-#!/usr/bin/env bash
-# -x
-
-#__main()__________
-
-# Source Nutanix environment (PATH + aliases), then common routines + global variables
-. /etc/profile.d/nutanix_env.sh
-. lib.common.sh
-. global.vars.sh
-begin
-
-args_required 'PE_PASSWORD'
-
-case ${1} in
-  PE | pe )
-    . lib.pe.sh
-
-    args_required 'PE_HOST'
-
-    dependencies 'install' 'jq' \
-    && files_install
-
-    log "PE = https://${PE_HOST}:9440"
-  ;;
-esac
-
-finish
