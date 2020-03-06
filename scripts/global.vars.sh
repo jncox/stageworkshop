@@ -146,6 +146,7 @@ case "${OCTET[3]}" in
 
 esac
 
+
 # Stuff needed for object_store
 OBJECTS_OFFLINE_REPO='http://10.42.194.11/workshop_staging/objects'
 VLAN=${OCTET[2]}

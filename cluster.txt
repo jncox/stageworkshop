@@ -1,16 +1,1 @@
-10.38.203.37|techX2020!|willem@nutanix.com
-10.38.204.37|techX2020!|willem@nutanix.com
-10.38.205.37|techX2020!|willem@nutanix.com
-10.38.206.37|techX2020!|willem@nutanix.com
-10.38.207.37|techX2020!|willem@nutanix.com
-10.38.208.37|techX2020!|willem@nutanix.com
-10.38.209.37|techX2020!|willem@nutanix.com
-10.38.210.37|techX2020!|willem@nutanix.com
-10.38.211.37|techX2020!|willem@nutanix.com
-10.38.212.37|techX2020!|willem@nutanix.com
-10.38.213.37|techX2020!|willem@nutanix.com
-10.38.217.37|techX2020!|willem@nutanix.com
-10.38.218.37|techX2020!|willem@nutanix.com
-10.38.216.37|techX2020!|willem@nutanix.com
-10.38.215.37|techX2020!|willem@nutanix.com
-10.38.214.37|techX2020!|willem@nutanix.com
+10.38.208.37|dotNext2020!|slotten@nutanix.com

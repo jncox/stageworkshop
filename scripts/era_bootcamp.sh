@@ -20,11 +20,7 @@ case ${1} in
 
     export AUTH_SERVER='AutoAD'
     # Networking needs for Era Bootcamp
-    export NW2_DHCP_START="${IPV4_PREFIX}.132"
-    export NW2_DHCP_END="${IPV4_PREFIX}.219"
-    export NW3_NAME='EraManaged'
-    export NW3_VLAN=$((OCTET[2]*10+1))
-    export NW3_SUBNET="${IPV4_PREFIX}.129/25"
+    export NW2_NAME='EraManaged'
 
     args_required 'PE_HOST PC_LAUNCH'
     ssh_pubkey & # non-blocking, parallel suitable

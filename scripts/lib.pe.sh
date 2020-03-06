@@ -570,10 +570,6 @@ function network_configure() {
 function era_network_configure() {
   local _network_name="${NW1_NAME}"
 
-  if [[ ! -z "${NW3_NAME}" ]]; then
-    #TODO: accommodate for X networks!
-    _network_name="${NW3_NAME}"
-  fi
 
   if [[ ! -z $(acli "net.list" | grep ${_network_name}) ]]; then
     log "IDEMPOTENCY: ${_network_name} network set, skip."
@@ -590,18 +586,13 @@ function era_network_configure() {
     acli "net.update_dhcp_dns ${NW1_NAME} servers=${AUTH_HOST},${DNS_SERVERS} domains=${AUTH_FQDN}"
     acli "  net.add_dhcp_pool ${NW1_NAME} start=${NW1_DHCP_START} end=${NW1_DHCP_END}"
 
+    # NW2 is EraManaged, so we do not need DHCP
     if [[ ! -z "${NW2_NAME}" ]]; then
-      log "Create secondary network: Name: ${NW2_NAME}, VLAN: ${NW2_VLAN}, Subnet: ${NW2_SUBNET}, Pool: ${NW2_DHCP_START} to ${NW2_DHCP_END}"
+      log "Create secondary network: Name: ${NW2_NAME}, VLAN: ${NW2_VLAN}, Subnet: ${NW2_SUBNET}"
       acli "net.create ${NW2_NAME} vlan=${NW2_VLAN} ip_config=${NW2_SUBNET}"
       acli "net.update_dhcp_dns ${NW2_NAME} servers=${AUTH_HOST},${DNS_SERVERS} domains=${AUTH_FQDN}"
-      acli "  net.add_dhcp_pool ${NW2_NAME} start=${NW2_DHCP_START} end=${NW2_DHCP_END}"
     fi
 
-    if [[ ! -z "${NW3_NAME}" ]]; then
-      log "Create EraManaged network: Name: ${NW3_NAME}, VLAN: ${NW3_VLAN}, Subnet: ${NW3_SUBNET}"
-      acli "net.create ${NW3_NAME} vlan=${NW3_VLAN} ip_config=${NW3_SUBNET}"
-      acli "net.update_dhcp_dns ${NW3_NAME} servers=${AUTH_HOST},${DNS_SERVERS} domains=${AUTH_FQDN}"
-    fi
   fi
 }
 
